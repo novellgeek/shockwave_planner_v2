@@ -169,7 +169,7 @@ class ReentryTimelineView(QWidget):
                 country = row_data['country']
                 expanded = row_data['expanded']
                 
-                expand_icon = "â–¼" if expanded else "â–¶"
+                expand_icon = "▼" if expanded else Pythin
                 item = QTableWidgetItem(f"{expand_icon} {country}")
                 font = item.font()
                 font.setBold(True)
