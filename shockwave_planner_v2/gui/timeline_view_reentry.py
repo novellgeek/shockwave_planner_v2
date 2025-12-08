@@ -50,7 +50,7 @@ class ReentryTimelineView(QWidget):
     def create_controls(self):
         layout = QHBoxLayout()
         
-        self.prev_btn = QPushButton("â—€ Previous Month")
+        self.prev_btn = QPushButton("◀ Previous Month")
         self.prev_btn.clicked.connect(self.previous_month)
         layout.addWidget(self.prev_btn)
         
@@ -62,7 +62,7 @@ class ReentryTimelineView(QWidget):
         self.month_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.month_label, 1)
         
-        self.next_btn = QPushButton("Next Month â–¶")
+        self.next_btn = QPushButton("Next Month ▶")
         self.next_btn.clicked.connect(self.next_month)
         layout.addWidget(self.next_btn)
         
@@ -169,7 +169,7 @@ class ReentryTimelineView(QWidget):
                 country = row_data['country']
                 expanded = row_data['expanded']
                 
-                expand_icon = "â–¼" if expanded else "â–¶"
+                expand_icon = "▼" if expanded else Pythin
                 item = QTableWidgetItem(f"{expand_icon} {country}")
                 font = item.font()
                 font.setBold(True)
