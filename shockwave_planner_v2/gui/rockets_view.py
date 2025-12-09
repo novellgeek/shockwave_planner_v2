@@ -8,7 +8,7 @@ Date: December 2025
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                               QTableWidget, QTableWidgetItem, QHeaderView,
                               QMessageBox, QDialog, QFormLayout, QLineEdit,
-                              QDialogButtonBox)
+                              QDialogButtonBox, QScrollArea)
 from PyQt6.QtCore import Qt
 
 
@@ -49,9 +49,9 @@ class RocketsView(QWidget):
         
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
+        self.table.setColumnCount(12)
         self.table.setHorizontalHeaderLabels([
-            'ID', 'Name', 'Family', 'Variant', 'Country'
+            'ID', 'Country', 'Name', 'Alt Name', 'Family', 'Variant', 'Stages', 'Boosters', 'Payload Leo', 'Payload SSO', 'Payload GTO', 'Payload TLI'
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -71,18 +71,25 @@ class RocketsView(QWidget):
         
         for row, rocket in enumerate(rockets):
             self.table.setItem(row, 0, QTableWidgetItem(str(rocket.get('rocket_id', ''))))
-            self.table.setItem(row, 1, QTableWidgetItem(rocket.get('name', '')))
-            self.table.setItem(row, 2, QTableWidgetItem(rocket.get('family', '')))
-            self.table.setItem(row, 3, QTableWidgetItem(rocket.get('variant', '')))
-            self.table.setItem(row, 4, QTableWidgetItem(rocket.get('country', '')))
-    
+            self.table.setItem(row, 1, QTableWidgetItem(rocket.get('country', '')))
+            self.table.setItem(row, 2, QTableWidgetItem(rocket.get('name', '')))
+            self.table.setItem(row, 3, QTableWidgetItem(rocket.get('alternative_name', '')))   
+            self.table.setItem(row, 4, QTableWidgetItem(rocket.get('family', '')))
+            self.table.setItem(row, 5, QTableWidgetItem(rocket.get('variant', '')))
+            self.table.setItem(row, 6, QTableWidgetItem(rocket.get('stages', '')))
+            self.table.setItem(row, 7, QTableWidgetItem(rocket.get('boosters', '')))
+            self.table.setItem(row, 8, QTableWidgetItem(rocket.get('payload_leo', '')))
+            self.table.setItem(row, 9, QTableWidgetItem(rocket.get('payload_sso', '')))
+            self.table.setItem(row, 10, QTableWidgetItem(rocket.get('payload_gto', '')))
+            self.table.setItem(row, 11, QTableWidgetItem(rocket.get('payload_tli', '')))
+
     def add_rocket(self):
         """Add a new rocket"""
         dialog = RocketEditorDialog(self.db, parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_table()
-            if self.parent():
-                self.parent().refresh_all()
+            if self.window():
+                self.window().refresh_all()
     
     def edit_rocket(self):
         """Edit the selected rocket"""
@@ -95,8 +102,8 @@ class RocketsView(QWidget):
         dialog = RocketEditorDialog(self.db, rocket_id=rocket_id, parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_table()
-            if self.parent():
-                self.parent().refresh_all()
+            if self.window():
+                self.window().refresh_all()
     
     def delete_rocket(self):
         """Delete the selected rocket"""
@@ -106,7 +113,7 @@ class RocketsView(QWidget):
             return
         
         rocket_id = int(self.table.item(current_row, 0).text())
-        name = self.table.item(current_row, 1).text()
+        name = self.table.item(current_row, 2).text()  # Fixed: was using column 1, should be 2 for name
         
         reply = QMessageBox.question(
             self,
@@ -120,8 +127,8 @@ class RocketsView(QWidget):
             try:
                 self.db.delete_rocket(rocket_id)
                 self.refresh_table()
-                if self.parent():
-                    self.parent().refresh_all()
+                if self.window():
+                    self.window().refresh_all()
                 QMessageBox.information(self, "Success", "Rocket deleted successfully!")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to delete rocket: {e}")
@@ -143,27 +150,66 @@ class RocketEditorDialog(QDialog):
     
     def init_ui(self):
         """Initialize the user interface"""
-        layout = QFormLayout()
+        # Create a scroll area for the form
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setMinimumWidth(500)
         
-        # Name
+        form_widget = QWidget()
+        layout = QFormLayout(form_widget)
+        
+        # Basic Information
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("e.g., Falcon 9 Block 5, Long March 2D")
-        layout.addRow("Rocket Name:", self.name_edit)
+        layout.addRow("Rocket Name:*", self.name_edit)
         
-        # Family
+        self.alternative_name_edit = QLineEdit()
+        self.alternative_name_edit.setPlaceholderText("e.g., F9, CZ-2D")
+        layout.addRow("Alternative Name:", self.alternative_name_edit)
+        
         self.family_edit = QLineEdit()
         self.family_edit.setPlaceholderText("e.g., Falcon, Long March, Soyuz")
         layout.addRow("Family:", self.family_edit)
         
-        # Variant
         self.variant_edit = QLineEdit()
         self.variant_edit.setPlaceholderText("e.g., Block 5, CZ-2D, 2.1a")
         layout.addRow("Variant:", self.variant_edit)
         
-        # Country
         self.country_edit = QLineEdit()
         self.country_edit.setPlaceholderText("e.g., USA, China, Russia")
         layout.addRow("Country:", self.country_edit)
+        
+        # Configuration
+        self.stages_edit = QLineEdit()
+        self.stages_edit.setPlaceholderText("e.g., 2, 3")
+        layout.addRow("Stages:", self.stages_edit)
+        
+        self.boosters_edit = QLineEdit()
+        self.boosters_edit.setPlaceholderText("e.g., 0, 2, 4")
+        layout.addRow("Boosters:", self.boosters_edit)
+        
+        # Payload Capacities
+        self.payload_leo_edit = QLineEdit()
+        self.payload_leo_edit.setPlaceholderText("e.g., 22800 kg")
+        layout.addRow("Payload to LEO:", self.payload_leo_edit)
+        
+        self.payload_sso_edit = QLineEdit()
+        self.payload_sso_edit.setPlaceholderText("e.g., 15600 kg")
+        layout.addRow("Payload to SSO:", self.payload_sso_edit)
+        
+        self.payload_gto_edit = QLineEdit()
+        self.payload_gto_edit.setPlaceholderText("e.g., 8300 kg")
+        layout.addRow("Payload to GTO:", self.payload_gto_edit)
+        
+        self.payload_tli_edit = QLineEdit()
+        self.payload_tli_edit.setPlaceholderText("e.g., 4020 kg")
+        layout.addRow("Payload to TLI:", self.payload_tli_edit)
+        
+        scroll.setWidget(form_widget)
+        
+        # Main layout with scroll area and buttons
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(scroll)
         
         # Buttons
         buttons = QDialogButtonBox(
@@ -172,9 +218,9 @@ class RocketEditorDialog(QDialog):
         )
         buttons.accepted.connect(self.save_rocket)
         buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
+        main_layout.addWidget(buttons)
         
-        self.setLayout(layout)
+        self.setLayout(main_layout)
     
     def load_rocket_data(self):
         """Load existing rocket data"""
@@ -183,9 +229,16 @@ class RocketEditorDialog(QDialog):
         
         if rocket:
             self.name_edit.setText(rocket.get('name', ''))
+            self.alternative_name_edit.setText(rocket.get('alternative_name', ''))
             self.family_edit.setText(rocket.get('family', ''))
             self.variant_edit.setText(rocket.get('variant', ''))
             self.country_edit.setText(rocket.get('country', ''))
+            self.stages_edit.setText(rocket.get('stages', ''))
+            self.boosters_edit.setText(rocket.get('boosters', ''))
+            self.payload_leo_edit.setText(rocket.get('payload_leo', ''))
+            self.payload_sso_edit.setText(rocket.get('payload_sso', ''))
+            self.payload_gto_edit.setText(rocket.get('payload_gto', ''))
+            self.payload_tli_edit.setText(rocket.get('payload_tli', ''))
     
     def save_rocket(self):
         """Save the rocket"""
@@ -197,9 +250,16 @@ class RocketEditorDialog(QDialog):
         
         rocket_data = {
             'name': name,
+            'alternative_name': self.alternative_name_edit.text().strip() or None,
             'family': self.family_edit.text().strip() or None,
             'variant': self.variant_edit.text().strip() or None,
-            'country': self.country_edit.text().strip() or None
+            'country': self.country_edit.text().strip() or None,
+            'stages': self.stages_edit.text().strip() or None,
+            'boosters': self.boosters_edit.text().strip() or None,
+            'payload_leo': self.payload_leo_edit.text().strip() or None,
+            'payload_sso': self.payload_sso_edit.text().strip() or None,
+            'payload_gto': self.payload_gto_edit.text().strip() or None,
+            'payload_tli': self.payload_tli_edit.text().strip() or None
         }
         
         try:
@@ -214,3 +274,5 @@ class RocketEditorDialog(QDialog):
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save rocket: {e}")
+
+
