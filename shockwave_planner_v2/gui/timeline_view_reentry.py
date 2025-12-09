@@ -7,6 +7,7 @@ Author: Remix Astronautics
 Date: December 2025
 Version: 2.0.0
 """
+
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
                               QTableWidgetItem, QPushButton, QLabel, QHeaderView,
                               QCheckBox, QSpinBox)
@@ -169,7 +170,7 @@ class ReentryTimelineView(QWidget):
                 country = row_data['country']
                 expanded = row_data['expanded']
                 
-                expand_icon = "▼" if expanded else Pythin
+                expand_icon = "▼" if expanded else "▶"
                 item = QTableWidgetItem(f"{expand_icon} {country}")
                 font = item.font()
                 font.setBold(True)
