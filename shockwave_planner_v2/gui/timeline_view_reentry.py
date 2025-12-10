@@ -75,16 +75,6 @@ class ReentryTimelineView(QWidget):
         self.active_only_cb.stateChanged.connect(self.toggle_active_only)
         layout.addWidget(self.active_only_cb)
         
-        layout.addSpacing(20)
-        
-        layout.addWidget(QLabel("Zone recovery (days):"))
-        self.turnaround_spin = QSpinBox()
-        self.turnaround_spin.setMinimum(0)
-        self.turnaround_spin.setMaximum(30)
-        self.turnaround_spin.setValue(self.zone_turnaround_days)
-        self.turnaround_spin.valueChanged.connect(self.update_turnaround)
-        layout.addWidget(self.turnaround_spin)
-        
         return layout
     
     def update_timeline(self):
@@ -96,13 +86,29 @@ class ReentryTimelineView(QWidget):
         # Get re-entries for this month
         reentries = self.db.get_reentries_by_month(self.current_year, self.current_month)
         
+        # Also get re-entries from the end of previous month for turnaround carry-over
+        prev_year = self.current_year
+        prev_month = self.current_month - 1
+        if prev_month < 1:
+            prev_month = 12
+            prev_year -= 1
+        prev_month_reentries = self.db.get_reentries_by_month(prev_year, prev_month)
+        
         # Group re-entries by zone
         zone_reentries = {}
+        zone_prev_reentries = {}  # Track previous month re-entries for turnaround
+        
         for reentry in reentries:
             key = (reentry.get('location', 'Unknown'), reentry.get('drop_zone', 'Unknown'))
             if key not in zone_reentries:
                 zone_reentries[key] = []
             zone_reentries[key].append(reentry)
+        
+        for reentry in prev_month_reentries:
+            key = (reentry.get('location', 'Unknown'), reentry.get('drop_zone', 'Unknown'))
+            if key not in zone_prev_reentries:
+                zone_prev_reentries[key] = []
+            zone_prev_reentries[key].append(reentry)
         
         # Get all re-entry sites and group by country
         all_sites = self.db.get_all_sites(site_type='REENTRY')
@@ -126,7 +132,9 @@ class ReentryTimelineView(QWidget):
                     'location': zone['location'],
                     'drop_zone': zone.get('launch_pad', 'Unknown'),
                     'site_id': zone['site_id'],
-                    'reentries': zone_reentries.get(zone_key, [])
+                    'turnaround_days': zone.get('turnaround_days', self.zone_turnaround_days),
+                    'reentries': zone_reentries.get(zone_key, []),
+                    'prev_month_reentries': zone_prev_reentries.get(zone_key, [])  # For turnaround carry-over
                 })
         
         # Build rows for display
@@ -197,8 +205,10 @@ class ReentryTimelineView(QWidget):
                 location_item.setForeground(Qt.GlobalColor.black)
                 self.timeline_table.setItem(row_idx, 0, location_item)
                 
-                # Drop zone
-                zone_item = QTableWidgetItem(row_data['drop_zone'])
+                # Drop zone - show turnaround days
+                turnaround = row_data.get('turnaround_days', self.zone_turnaround_days)
+                zone_text = f"{row_data['drop_zone']} ({turnaround}d)"
+                zone_item = QTableWidgetItem(zone_text)
                 zone_item.setBackground(QColor(240, 240, 245))
                 zone_item.setForeground(Qt.GlobalColor.black)
                 self.timeline_table.setItem(row_idx, 1, zone_item)
@@ -234,13 +244,37 @@ class ReentryTimelineView(QWidget):
                             'count': len(day_reentries)
                         })
                     else:
-                        # Check for recovery period
+                        # Check for recovery period using zone-specific turnaround
                         in_recovery = False
+                        zone_turnaround = row_data.get('turnaround_days', self.zone_turnaround_days)
+                        
+                        # Check re-entries in current month
                         for reentry in row_data['reentries']:
                             reentry_day = datetime.strptime(reentry['reentry_date'], '%Y-%m-%d').day
-                            if reentry_day < col_day <= reentry_day + self.zone_turnaround_days:
+                            if reentry_day < col_day <= reentry_day + zone_turnaround:
                                 in_recovery = True
                                 break
+                        
+                        # Check re-entries from previous month that might extend into current month
+                        if not in_recovery and row_data.get('prev_month_reentries'):
+                            prev_year = self.current_year
+                            prev_month = self.current_month - 1
+                            if prev_month < 1:
+                                prev_month = 12
+                                prev_year -= 1
+                            
+                            days_in_prev_month = calendar.monthrange(prev_year, prev_month)[1]
+                            
+                            for prev_reentry in row_data['prev_month_reentries']:
+                                prev_reentry_date = datetime.strptime(prev_reentry['reentry_date'], '%Y-%m-%d')
+                                prev_reentry_day = prev_reentry_date.day
+                                
+                                # Calculate how many days into current month the recovery extends
+                                days_past_month_end = (prev_reentry_day + zone_turnaround) - days_in_prev_month
+                                
+                                if days_past_month_end > 0 and col_day <= days_past_month_end:
+                                    in_recovery = True
+                                    break
                         
                         if in_recovery:
                             item.setBackground(QColor(200, 200, 200))
@@ -288,8 +322,4 @@ class ReentryTimelineView(QWidget):
     
     def toggle_active_only(self, state):
         self.show_only_active = (state == Qt.CheckState.Checked.value)
-        self.update_timeline()
-    
-    def update_turnaround(self, value):
-        self.zone_turnaround_days = value
         self.update_timeline()
