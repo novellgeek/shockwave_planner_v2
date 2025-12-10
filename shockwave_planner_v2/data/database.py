@@ -355,10 +355,15 @@ class LaunchDatabase:
         
         self.conn.commit()
     
-    def delete_site(self, site_id: int):
-        """Delete a launch site"""
+    def delete_site(self, site_id: int, site_type: str = 'LAUNCH'):
+        """Delete a launch site or reentry site"""
         cursor = self.conn.cursor()
-        cursor.execute('DELETE FROM launch_sites WHERE site_id = ?', (site_id,))
+        
+        if site_type == 'REENTRY':
+            cursor.execute('DELETE FROM reentry_sites WHERE reentry_site_id = ?', (site_id,))
+        else:
+            cursor.execute('DELETE FROM launch_sites WHERE site_id = ?', (site_id,))
+        
         self.conn.commit()
     
     # ==================== ROCKET OPERATIONS ====================
