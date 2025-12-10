@@ -86,13 +86,29 @@ class ReentryTimelineView(QWidget):
         # Get re-entries for this month
         reentries = self.db.get_reentries_by_month(self.current_year, self.current_month)
         
+        # Also get re-entries from the end of previous month for turnaround carry-over
+        prev_year = self.current_year
+        prev_month = self.current_month - 1
+        if prev_month < 1:
+            prev_month = 12
+            prev_year -= 1
+        prev_month_reentries = self.db.get_reentries_by_month(prev_year, prev_month)
+        
         # Group re-entries by zone
         zone_reentries = {}
+        zone_prev_reentries = {}  # Track previous month re-entries for turnaround
+        
         for reentry in reentries:
             key = (reentry.get('location', 'Unknown'), reentry.get('drop_zone', 'Unknown'))
             if key not in zone_reentries:
                 zone_reentries[key] = []
             zone_reentries[key].append(reentry)
+        
+        for reentry in prev_month_reentries:
+            key = (reentry.get('location', 'Unknown'), reentry.get('drop_zone', 'Unknown'))
+            if key not in zone_prev_reentries:
+                zone_prev_reentries[key] = []
+            zone_prev_reentries[key].append(reentry)
         
         # Get all re-entry sites and group by country
         all_sites = self.db.get_all_sites(site_type='REENTRY')
@@ -235,6 +251,27 @@ class ReentryTimelineView(QWidget):
                             if reentry_day < col_day <= reentry_day + zone_turnaround:
                                 in_recovery = True
                                 break
+                        
+                        # Check re-entries from previous month that might extend into current month
+                        if not in_recovery and row_data.get('prev_month_reentries'):
+                            prev_year = self.current_year
+                            prev_month = self.current_month - 1
+                            if prev_month < 1:
+                                prev_month = 12
+                                prev_year -= 1
+                            
+                            days_in_prev_month = calendar.monthrange(prev_year, prev_month)[1]
+                            
+                            for prev_reentry in row_data['prev_month_reentries']:
+                                prev_reentry_date = datetime.strptime(prev_reentry['reentry_date'], '%Y-%m-%d')
+                                prev_reentry_day = prev_reentry_date.day
+                                
+                                # Calculate how many days into current month the recovery extends
+                                days_past_month_end = (prev_reentry_day + zone_turnaround) - days_in_prev_month
+                                
+                                if days_past_month_end > 0 and col_day <= days_past_month_end:
+                                    in_recovery = True
+                                    break
                         
                         if in_recovery:
                             item.setBackground(QColor(200, 200, 200))
