@@ -29,7 +29,8 @@ class ReentryTimelineView(QWidget):
         self.current_month = datetime.now().month
         self.show_only_active = True
         self.zone_turnaround_days = 7
-        self.expanded_groups = set()  # Will auto-expand countries with re-entries
+        self.expanded_groups = set()  # Track which countries are expanded
+        self.initial_load = True  # Track if this is the first load
         self.init_ui()
     
     def init_ui(self):
@@ -134,8 +135,8 @@ class ReentryTimelineView(QWidget):
             zones = country_zones_map[country]
             country_has_reentries = any(z['reentries'] for z in zones)
             
-            # Auto-expand countries with re-entries
-            if country_has_reentries and country not in self.expanded_groups:
+            # FIXED: Only auto-expand countries with re-entries on initial load
+            if self.initial_load and country_has_reentries:
                 self.expanded_groups.add(country)
             
             if zones and (country_has_reentries or not self.show_only_active):
@@ -148,9 +149,15 @@ class ReentryTimelineView(QWidget):
                 if country in self.expanded_groups:
                     rows.extend(zones)
         
+        # Mark that initial load is complete
+        self.initial_load = False
+        
         # Setup table
         self.timeline_table.setRowCount(len(rows))
         self.timeline_table.setColumnCount(3 + days_in_month)
+        
+        # Clear all spans from previous render
+        self.timeline_table.clearSpans()
         
         headers = ['REGION', 'DROP ZONE', 'VEHICLE']
         for day in range(1, days_in_month + 1):

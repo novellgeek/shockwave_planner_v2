@@ -23,7 +23,8 @@ class TimelineView(QWidget):
         self.current_month = datetime.now().month
         self.show_only_active = True
         self.pad_turnaround_days = 7
-        self.expanded_groups = set()  # Will auto-expand countries with launches
+        self.expanded_groups = set()  # Track which countries are expanded
+        self.initial_load = True  # Track if this is the first load
         self.init_ui()
     
     def init_ui(self):
@@ -126,8 +127,8 @@ class TimelineView(QWidget):
             sites = country_sites_map[country]
             country_has_launches = any(s['launches'] for s in sites)
             
-            # Auto-expand countries with launches
-            if country_has_launches and country not in self.expanded_groups:
+            # FIXED: Only auto-expand countries with launches on initial load
+            if self.initial_load and country_has_launches:
                 self.expanded_groups.add(country)
             
             if sites and (country_has_launches or not self.show_only_active):
@@ -140,8 +141,14 @@ class TimelineView(QWidget):
                 if country in self.expanded_groups:
                     rows.extend(sites)
         
+        # Mark that initial load is complete
+        self.initial_load = False
+        
         self.timeline_table.setRowCount(len(rows))
         self.timeline_table.setColumnCount(3 + days_in_month)
+        
+        # Clear all spans from previous render
+        self.timeline_table.clearSpans()
         
         headers = ['LOCATION', 'LAUNCH PAD', 'ROCKET']
         for day in range(1, days_in_month + 1):
