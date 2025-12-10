@@ -26,7 +26,7 @@ from gui.timeline_view_reentry import ReentryTimelineView
 from gui.reentry_dialog import ReentryDialog
 from gui.launch_sites_view import LaunchSitesView
 from gui.rockets_view import RocketsView
-
+from gui.reentry_vehicles_view import ReentryVehiclesView
 
 class SyncWorker(QThread):
     """Background worker for Space Devs sync"""
@@ -514,6 +514,9 @@ class MainWindow(QMainWindow):
         # Rockets view
         self.rockets_view = RocketsView(self.db, parent=self)
         self.tab_widget.addTab(self.rockets_view, "Launch Vehicles")
+        # Re-entry vehicle view
+        self.reentry_vehicles_tab = ReentryVehiclesView(self.db)
+        self.tab_widget.addTab(self.reentry_vehicles_tab, "Re-entry Vehicles")
         
         main_layout.addWidget(self.tab_widget)
         
@@ -757,6 +760,7 @@ class MainWindow(QMainWindow):
         self.list_view.refresh()
         self.sites_view.refresh_table()
         self.rockets_view.refresh_table()
+        self.reentry_vehicles_tab.refresh_table()
         
         # Recreate statistics tab
         stats_widget = self.create_statistics_widget()
