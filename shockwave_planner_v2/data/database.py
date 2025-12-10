@@ -409,6 +409,72 @@ class LaunchDatabase:
         # Create new rocket
         return self.add_rocket({'name': name, 'external_id': external_id})
     
+    # ==================== RE-ENTRY VEHICLE OPERATIONS ====================
+    
+    def get_all_reentry_vehicles(self) -> List[Dict]:
+        """Get all re-entry vehicles"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT vehicle_id as reentry_vehicle_id, name, alternative_name, family, variant,
+                   manufacturer, country, payload, decelerator, remarks, external_id
+            FROM reentry_vehicle
+            ORDER BY name
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def add_reentry_vehicle(self, vehicle_data: Dict) -> int:
+        """Add a new re-entry vehicle"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            INSERT INTO reentry_vehicle (
+                name, alternative_name, family, variant, manufacturer, country,
+                payload, decelerator, remarks, external_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            vehicle_data['name'],
+            vehicle_data.get('alternative_name'),
+            vehicle_data.get('family'),
+            vehicle_data.get('variant'),
+            vehicle_data.get('manufacturer'),
+            vehicle_data.get('country'),
+            vehicle_data.get('payload'),
+            vehicle_data.get('decelerator'),
+            vehicle_data.get('remarks'),
+            vehicle_data.get('external_id')
+        ))
+        self.conn.commit()
+        return cursor.lastrowid
+    
+    def update_reentry_vehicle(self, vehicle_id: int, vehicle_data: Dict):
+        """Update an existing re-entry vehicle"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE reentry_vehicle SET
+                name = ?, alternative_name = ?, family = ?, variant = ?,
+                manufacturer = ?, country = ?, payload = ?, decelerator = ?,
+                remarks = ?, external_id = ?
+            WHERE vehicle_id = ?
+        ''', (
+            vehicle_data['name'],
+            vehicle_data.get('alternative_name'),
+            vehicle_data.get('family'),
+            vehicle_data.get('variant'),
+            vehicle_data.get('manufacturer'),
+            vehicle_data.get('country'),
+            vehicle_data.get('payload'),
+            vehicle_data.get('decelerator'),
+            vehicle_data.get('remarks'),
+            vehicle_data.get('external_id'),
+            vehicle_id
+        ))
+        self.conn.commit()
+    
+    def delete_reentry_vehicle(self, vehicle_id: int):
+        """Delete a re-entry vehicle"""
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM reentry_vehicle WHERE vehicle_id = ?', (vehicle_id,))
+        self.conn.commit()
+        
     # ==================== STATUS OPERATIONS ====================
     
     def get_all_statuses(self) -> List[Dict]:
