@@ -366,6 +366,81 @@ class LaunchDatabase:
         
         self.conn.commit()
     
+    def calculate_pad_turnaround(self, site_id: int) -> Optional[int]:
+        """
+        Calculate the shortest turnaround time for a launch pad based on successful launches.
+        Returns the minimum number of days between consecutive successful launches, or None if insufficient data.
+        """
+        cursor = self.conn.cursor()
+        
+        # Get all successful launches from this site, ordered by date
+        cursor.execute('''
+            SELECT l.launch_date
+            FROM launches l
+            JOIN launch_status st ON l.status_id = st.status_id
+            WHERE l.site_id = ? AND st.status_name = 'Success'
+            ORDER BY l.launch_date ASC
+        ''', (site_id,))
+        
+        launches = cursor.fetchall()
+        
+        if len(launches) < 2:
+            return None  # Need at least 2 successful launches to calculate turnaround
+        
+        # Calculate days between each consecutive pair
+        min_turnaround = None
+        
+        for i in range(1, len(launches)):
+            prev_date = datetime.strptime(launches[i-1]['launch_date'], '%Y-%m-%d')
+            curr_date = datetime.strptime(launches[i]['launch_date'], '%Y-%m-%d')
+            
+            days_between = (curr_date - prev_date).days
+            
+            if min_turnaround is None or days_between < min_turnaround:
+                min_turnaround = days_between
+        
+        return min_turnaround
+    
+    def update_pad_turnaround_from_history(self, site_id: int) -> bool:
+        """
+        Update a launch pad's turnaround_days based on successful launch history.
+        Returns True if updated, False if insufficient data.
+        """
+        turnaround = self.calculate_pad_turnaround(site_id)
+        
+        if turnaround is not None:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                UPDATE launch_sites 
+                SET turnaround_days = ?
+                WHERE site_id = ?
+            ''', (turnaround, site_id))
+            self.conn.commit()
+            return True
+        
+        return False
+    
+    def update_all_pad_turnarounds_from_history(self) -> Dict[str, int]:
+        """
+        Update turnaround_days for all launch pads based on their successful launch history.
+        Returns dict with 'updated' and 'skipped' counts.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT site_id FROM launch_sites WHERE site_type = "LAUNCH"')
+        sites = cursor.fetchall()
+        
+        updated = 0
+        skipped = 0
+        
+        for site in sites:
+            site_id = site['site_id']
+            if self.update_pad_turnaround_from_history(site_id):
+                updated += 1
+            else:
+                skipped += 1
+        
+        return {'updated': updated, 'skipped': skipped}
+    
     # ==================== ROCKET OPERATIONS ====================
     
     def get_all_rockets(self) -> List[Dict]:
@@ -576,7 +651,22 @@ class LaunchDatabase:
             launch_data.get('external_id')
         ))
         self.conn.commit()
-        return cursor.lastrowid
+        launch_id = cursor.lastrowid
+        
+        # Auto-update pad turnaround if status is Success
+        if launch_data.get('status_id'):
+            status_name = self._get_status_name(launch_data['status_id'])
+            if status_name == 'Success' and launch_data.get('site_id'):
+                self.update_pad_turnaround_from_history(launch_data['site_id'])
+        
+        return launch_id
+    
+    def _get_status_name(self, status_id: int) -> Optional[str]:
+        """Helper method to get status name from status_id"""
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT status_name FROM launch_status WHERE status_id = ?', (status_id,))
+        result = cursor.fetchone()
+        return result['status_name'] if result else None
     
     def update_launch(self, launch_id: int, launch_data: Dict):
         """Update an existing launch"""
@@ -623,6 +713,21 @@ class LaunchDatabase:
         
         cursor.execute(query, values)
         self.conn.commit()
+        
+        # Auto-update pad turnaround if status changed to Success
+        if 'status_id' in launch_data:
+            status_name = self._get_status_name(launch_data['status_id'])
+            if status_name == 'Success':
+                # Get site_id from launch_data or fetch from database
+                site_id = launch_data.get('site_id')
+                if not site_id:
+                    cursor.execute('SELECT site_id FROM launches WHERE launch_id = ?', (launch_id,))
+                    result = cursor.fetchone()
+                    if result:
+                        site_id = result['site_id']
+                
+                if site_id:
+                    self.update_pad_turnaround_from_history(site_id)
     
     def delete_launch(self, launch_id: int):
         """Delete a launch"""
