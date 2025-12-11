@@ -1,11 +1,9 @@
-# shockwave_planner_v2
 # SHOCKWAVE PLANNER v2.0
 ## Desktop Launch Operations Planning System
 
 **Version**: 2.0.0  
 **Created**: December 2025  
-**For**: Remix Astronautics 
-**Author**: Phil Holdstock
+**Author**: Remix Astronautics  
 
 ---
 
@@ -460,3 +458,67 @@ Currently using public Space Devs API (no key required). If you need higher rate
 - **USER_GUIDE.md** - Comprehensive user manual
 - **API_INTEGRATION.md** - Space Devs integration details
 - **ARCHITECTURE.md** - Technical architecture documentation
+
+---
+
+## 🎯 Roadmap (Future Versions)
+
+### v2.1 - Enhanced Features
+- Re-entry editor dialog
+- Advanced filtering
+- Export to Excel/CSV
+- Custom reports
+
+### v2.2 - Analysis Tools
+- Trend analysis
+- Predictive launch windows
+- Orbital parameter tracking
+- TLE integration
+
+### v2.3 - Collaboration
+- Multi-user support
+- Change tracking
+- Comments/annotations
+- Email notifications
+
+---
+
+## 🆘 Getting Help
+
+### Issues & Questions
+
+1. Check this README
+2. Review documentation in `/docs`
+3. Check sync logs for API issues
+4. Examine database for data issues
+
+### Contact
+
+- **System**: NZDF 62SQN Space Operations Centre
+- **Created for**: Phil @ TAWHIRI Project
+
+---
+
+## 📄 License
+
+Created for NZDF 62SQN Space Operations Centre  
+Unauthorized distribution prohibited
+
+---
+
+## 🙏 Acknowledgments
+
+- **The Space Devs** - Launch Library API
+- **PyQt6** - GUI framework
+- **SQLite** - Database engine
+- **Python** - Programming language
+
+---
+
+**SHOCKWAVE PLANNER v2.0**  
+*Desktop Launch Operations Planning System*  
+Remix Astronautics - December 2025
+
+---
+
+*Ready for operations. Let's track some launches! 🚀*
