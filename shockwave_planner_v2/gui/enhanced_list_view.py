@@ -46,6 +46,7 @@ class EnhancedListView(QWidget):
             "Previous 7 Days",
             "Previous 30 Days", 
             "Current (Today)",
+            "Next 7 Days",
             "Next 30 Days",
             "Custom Range..."
         ])
@@ -96,9 +97,9 @@ class EnhancedListView(QWidget):
         
         # Launch table
         self.launch_table = QTableWidget()
-        self.launch_table.setColumnCount(9)
+        self.launch_table.setColumnCount(10)
         self.launch_table.setHorizontalHeaderLabels([
-            'Date (UTC)', 'Time (UTC)', 'Site', 'Rocket', 'Mission', 
+            'Date (UTC)', 'Time (UTC)', 'Country', 'Site', 'Rocket', 'Mission', 
             'Payload', 'Orbit','NOTAM', 'Status'
         ])
         self.launch_table.verticalHeader().setDefaultSectionSize(45)
@@ -139,6 +140,9 @@ class EnhancedListView(QWidget):
         elif self.current_filter == 'current':
             start = today
             end = today
+        elif self.current_filter == 'next_7':
+            start = today
+            end = today + timedelta(days=7)
         elif self.current_filter == 'next_30':
             start = today
             end = today + timedelta(days=30)
@@ -153,7 +157,7 @@ class EnhancedListView(QWidget):
     
     def on_date_range_changed(self, index):
         """Handle date range selection change"""
-        filters = ['previous_7', 'previous_30', 'current', 'next_30', 'custom']
+        filters = ['previous_7', 'previous_30', 'current', 'next_7', 'next_30', 'custom']
         self.current_filter = filters[index]
         
         # Show/hide custom range inputs
@@ -190,33 +194,36 @@ class EnhancedListView(QWidget):
             time_str = launch.get('launch_time', '')[:5] if launch.get('launch_time') else ''
             self.launch_table.setItem(row, 1, create_centered_item(time_str))
             
+            # Country
+            self.launch_table.setItem(row, 2, create_centered_item(launch.get('country', '')))
+            
             # Site
             site_str = f"{launch.get('location', '')} {launch.get('launch_pad', '')}"
-            self.launch_table.setItem(row, 2, create_centered_item(site_str))
+            self.launch_table.setItem(row, 3, create_centered_item(site_str))
             
             # Rocket
-            self.launch_table.setItem(row, 3, create_centered_item(launch.get('rocket_name', '')))
+            self.launch_table.setItem(row, 4, create_centered_item(launch.get('rocket_name', '')))
             
             # Mission
-            self.launch_table.setItem(row, 4, create_centered_item(launch.get('mission_name', '')))
+            self.launch_table.setItem(row, 5, create_centered_item(launch.get('mission_name', '')))
             
             # Payload
-            self.launch_table.setItem(row, 5, create_centered_item(launch.get('payload_name', '')))
+            self.launch_table.setItem(row, 6, create_centered_item(launch.get('payload_name', '')))
             
             # Orbit
-            self.launch_table.setItem(row, 6, create_centered_item(launch.get('orbit_type', '')))
+            self.launch_table.setItem(row, 7, create_centered_item(launch.get('orbit_type', '')))
             
             # NOTAM
             notam_item = create_centered_item(launch.get('notam_reference', ''))
             if launch.get('notam_reference'):
                 notam_item.setBackground(QColor(255, 255, 200))  # Light yellow highlight
-            self.launch_table.setItem(row, 7, notam_item)
+            self.launch_table.setItem(row, 8, notam_item)
             
             # Status
             status_item = create_centered_item(launch.get('status_name', ''))
             if launch.get('status_color'):
                 status_item.setBackground(QColor(launch['status_color']))
-            self.launch_table.setItem(row, 8, status_item)
+            self.launch_table.setItem(row, 9, status_item)
             
             # Store launch_id in first column
             self.launch_table.item(row, 0).setData(Qt.ItemDataRole.UserRole, launch['launch_id'])
@@ -226,6 +233,7 @@ class EnhancedListView(QWidget):
             'previous_7': 'Previous 7 Days',
             'previous_30': 'Previous 30 Days',
             'current': 'Current (Today)',
+            'next_7': 'Next 7 Days',
             'next_30': 'Next 30 Days',
             'custom': 'Custom Range'
         }
@@ -282,6 +290,12 @@ def get_current_day():
     """Get date range for current day"""
     today = datetime.now().date()
     return today.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d')
+
+def get_next_7_days():
+    """Get date range for next 7 days"""
+    start = datetime.now().date()
+    end = start + timedelta(days=7)
+    return start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d')
 
 def get_next_30_days():
     """Get date range for next 30 days"""

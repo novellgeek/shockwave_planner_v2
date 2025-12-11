@@ -781,7 +781,7 @@ class LaunchDatabase:
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT l.*, 
-                   ls.location, ls.launch_pad,
+                   ls.location, ls.launch_pad, ls.country,
                    r.name as rocket_name,
                    st.status_name, st.status_color
             FROM launches l
@@ -799,7 +799,7 @@ class LaunchDatabase:
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT l.*, 
-                   ls.location, ls.launch_pad,
+                   ls.location, ls.launch_pad, ls.country,
                    r.name as rocket_name,
                    st.status_name, st.status_color
             FROM launches l
@@ -817,7 +817,7 @@ class LaunchDatabase:
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT l.*, 
-                   ls.location, ls.launch_pad,
+                   ls.location, ls.launch_pad, ls.country,
                    r.name as rocket_name,
                    st.status_name, st.status_color
             FROM launches l
@@ -835,7 +835,7 @@ class LaunchDatabase:
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT l.*, 
-                   ls.location, ls.launch_pad,
+                   ls.location, ls.launch_pad, ls.country,
                    r.name as rocket_name,
                    st.status_name, st.status_color
             FROM launches l
