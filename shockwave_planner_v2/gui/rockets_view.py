@@ -70,18 +70,22 @@ class RocketsView(QWidget):
         self.table.setRowCount(len(rockets))
         
         for row, rocket in enumerate(rockets):
-            self.table.setItem(row, 0, QTableWidgetItem(str(rocket.get('rocket_id', ''))))
-            self.table.setItem(row, 1, QTableWidgetItem(rocket.get('country', '')))
-            self.table.setItem(row, 2, QTableWidgetItem(rocket.get('name', '')))
-            self.table.setItem(row, 3, QTableWidgetItem(rocket.get('alternative_name', '')))   
-            self.table.setItem(row, 4, QTableWidgetItem(rocket.get('family', '')))
-            self.table.setItem(row, 5, QTableWidgetItem(rocket.get('variant', '')))
-            self.table.setItem(row, 6, QTableWidgetItem(rocket.get('stages', '')))
-            self.table.setItem(row, 7, QTableWidgetItem(rocket.get('boosters', '')))
-            self.table.setItem(row, 8, QTableWidgetItem(rocket.get('payload_leo', '')))
-            self.table.setItem(row, 9, QTableWidgetItem(rocket.get('payload_sso', '')))
-            self.table.setItem(row, 10, QTableWidgetItem(rocket.get('payload_gto', '')))
-            self.table.setItem(row, 11, QTableWidgetItem(rocket.get('payload_tli', '')))
+            # Helper function to safely convert values to strings
+            def safe_str(value):
+                return str(value) if value is not None else ''
+            
+            self.table.setItem(row, 0, QTableWidgetItem(safe_str(rocket.get('rocket_id', ''))))
+            self.table.setItem(row, 1, QTableWidgetItem(safe_str(rocket.get('country', ''))))
+            self.table.setItem(row, 2, QTableWidgetItem(safe_str(rocket.get('name', ''))))
+            self.table.setItem(row, 3, QTableWidgetItem(safe_str(rocket.get('alternative_name', ''))))   
+            self.table.setItem(row, 4, QTableWidgetItem(safe_str(rocket.get('family', ''))))
+            self.table.setItem(row, 5, QTableWidgetItem(safe_str(rocket.get('variant', ''))))
+            self.table.setItem(row, 6, QTableWidgetItem(safe_str(rocket.get('stages', ''))))
+            self.table.setItem(row, 7, QTableWidgetItem(safe_str(rocket.get('boosters', ''))))
+            self.table.setItem(row, 8, QTableWidgetItem(safe_str(rocket.get('payload_leo', ''))))
+            self.table.setItem(row, 9, QTableWidgetItem(safe_str(rocket.get('payload_sso', ''))))
+            self.table.setItem(row, 10, QTableWidgetItem(safe_str(rocket.get('payload_gto', ''))))
+            self.table.setItem(row, 11, QTableWidgetItem(safe_str(rocket.get('payload_tli', ''))))
 
     def add_rocket(self):
         """Add a new rocket"""
@@ -98,7 +102,18 @@ class RocketsView(QWidget):
             QMessageBox.warning(self, "No Selection", "Please select a rocket to edit.")
             return
         
-        rocket_id = int(self.table.item(current_row, 0).text())
+        # Safely get the rocket_id from the table
+        id_item = self.table.item(current_row, 0)
+        if not id_item or not id_item.text().strip():
+            QMessageBox.warning(self, "Invalid Selection", "The selected row has no valid ID.")
+            return
+        
+        try:
+            rocket_id = int(id_item.text())
+        except ValueError:
+            QMessageBox.warning(self, "Invalid ID", f"Invalid rocket ID: {id_item.text()}")
+            return
+        
         dialog = RocketEditorDialog(self.db, rocket_id=rocket_id, parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_table()
@@ -112,7 +127,18 @@ class RocketsView(QWidget):
             QMessageBox.warning(self, "No Selection", "Please select a rocket to delete.")
             return
         
-        rocket_id = int(self.table.item(current_row, 0).text())
+        # Safely get the rocket_id from the table
+        id_item = self.table.item(current_row, 0)
+        if not id_item or not id_item.text().strip():
+            QMessageBox.warning(self, "Invalid Selection", "The selected row has no valid ID.")
+            return
+        
+        try:
+            rocket_id = int(id_item.text())
+        except ValueError:
+            QMessageBox.warning(self, "Invalid ID", f"Invalid rocket ID: {id_item.text()}")
+            return
+        
         name = self.table.item(current_row, 2).text()  # Fixed: was using column 1, should be 2 for name
         
         reply = QMessageBox.question(
@@ -227,18 +253,26 @@ class RocketEditorDialog(QDialog):
         rockets = self.db.get_all_rockets()
         rocket = next((r for r in rockets if r['rocket_id'] == self.rocket_id), None)
         
-        if rocket:
-            self.name_edit.setText(rocket.get('name', ''))
-            self.alternative_name_edit.setText(rocket.get('alternative_name', ''))
-            self.family_edit.setText(rocket.get('family', ''))
-            self.variant_edit.setText(rocket.get('variant', ''))
-            self.country_edit.setText(rocket.get('country', ''))
-            self.stages_edit.setText(rocket.get('stages', ''))
-            self.boosters_edit.setText(rocket.get('boosters', ''))
-            self.payload_leo_edit.setText(rocket.get('payload_leo', ''))
-            self.payload_sso_edit.setText(rocket.get('payload_sso', ''))
-            self.payload_gto_edit.setText(rocket.get('payload_gto', ''))
-            self.payload_tli_edit.setText(rocket.get('payload_tli', ''))
+        if not rocket:
+            QMessageBox.critical(self, "Error", f"Could not find rocket with ID {self.rocket_id}")
+            self.reject()
+            return
+        
+        # Helper function to safely convert values to strings
+        def safe_str(value):
+            return str(value) if value is not None else ''
+        
+        self.name_edit.setText(safe_str(rocket.get('name', '')))
+        self.alternative_name_edit.setText(safe_str(rocket.get('alternative_name', '')))
+        self.family_edit.setText(safe_str(rocket.get('family', '')))
+        self.variant_edit.setText(safe_str(rocket.get('variant', '')))
+        self.country_edit.setText(safe_str(rocket.get('country', '')))
+        self.stages_edit.setText(safe_str(rocket.get('stages', '')))
+        self.boosters_edit.setText(safe_str(rocket.get('boosters', '')))
+        self.payload_leo_edit.setText(safe_str(rocket.get('payload_leo', '')))
+        self.payload_sso_edit.setText(safe_str(rocket.get('payload_sso', '')))
+        self.payload_gto_edit.setText(safe_str(rocket.get('payload_gto', '')))
+        self.payload_tli_edit.setText(safe_str(rocket.get('payload_tli', '')))
     
     def save_rocket(self):
         """Save the rocket"""

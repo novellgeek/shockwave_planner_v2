@@ -70,14 +70,18 @@ class ReentryVehiclesView(QWidget):
         self.table.setRowCount(len(vehicles))
         
         for row, vehicle in enumerate(vehicles):
-            self.table.setItem(row, 0, QTableWidgetItem(str(vehicle.get('vehicle_id', ''))))
-            self.table.setItem(row, 1, QTableWidgetItem(vehicle.get('name', '')))
-            self.table.setItem(row, 2, QTableWidgetItem(vehicle.get('alternative_name', '')))
-            self.table.setItem(row, 3, QTableWidgetItem(vehicle.get('family', '')))
-            self.table.setItem(row, 4, QTableWidgetItem(vehicle.get('variant', '')))
-            self.table.setItem(row, 5, QTableWidgetItem(vehicle.get('manufacturer', '')))
-            self.table.setItem(row, 6, QTableWidgetItem(vehicle.get('country', '')))
-            self.table.setItem(row, 7, QTableWidgetItem(vehicle.get('decelerator', '')))
+            # Helper function to safely convert values to strings
+            def safe_str(value):
+                return str(value) if value is not None else ''
+            
+            self.table.setItem(row, 0, QTableWidgetItem(safe_str(vehicle.get('vehicle_id', ''))))
+            self.table.setItem(row, 1, QTableWidgetItem(safe_str(vehicle.get('name', ''))))
+            self.table.setItem(row, 2, QTableWidgetItem(safe_str(vehicle.get('alternative_name', ''))))
+            self.table.setItem(row, 3, QTableWidgetItem(safe_str(vehicle.get('family', ''))))
+            self.table.setItem(row, 4, QTableWidgetItem(safe_str(vehicle.get('variant', ''))))
+            self.table.setItem(row, 5, QTableWidgetItem(safe_str(vehicle.get('manufacturer', ''))))
+            self.table.setItem(row, 6, QTableWidgetItem(safe_str(vehicle.get('country', ''))))
+            self.table.setItem(row, 7, QTableWidgetItem(safe_str(vehicle.get('decelerator', ''))))
 
     def add_vehicle(self):
         """Add a new re-entry vehicle"""
@@ -94,7 +98,18 @@ class ReentryVehiclesView(QWidget):
             QMessageBox.warning(self, "No Selection", "Please select a re-entry vehicle to edit.")
             return
         
-        vehicle_id = int(self.table.item(current_row, 0).text())
+        # Safely get the vehicle_id from the table
+        id_item = self.table.item(current_row, 0)
+        if not id_item or not id_item.text().strip():
+            QMessageBox.warning(self, "Invalid Selection", "The selected row has no valid ID.")
+            return
+        
+        try:
+            vehicle_id = int(id_item.text())
+        except ValueError:
+            QMessageBox.warning(self, "Invalid ID", f"Invalid vehicle ID: {id_item.text()}")
+            return
+        
         dialog = ReentryVehicleEditorDialog(self.db, vehicle_id=vehicle_id, parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_table()
@@ -108,7 +123,18 @@ class ReentryVehiclesView(QWidget):
             QMessageBox.warning(self, "No Selection", "Please select a re-entry vehicle to delete.")
             return
         
-        vehicle_id = int(self.table.item(current_row, 0).text())
+        # Safely get the vehicle_id from the table
+        id_item = self.table.item(current_row, 0)
+        if not id_item or not id_item.text().strip():
+            QMessageBox.warning(self, "Invalid Selection", "The selected row has no valid ID.")
+            return
+        
+        try:
+            vehicle_id = int(id_item.text())
+        except ValueError:
+            QMessageBox.warning(self, "Invalid ID", f"Invalid vehicle ID: {id_item.text()}")
+            return
+        
         name = self.table.item(current_row, 1).text()
         
         reply = QMessageBox.question(
@@ -224,20 +250,31 @@ class ReentryVehicleEditorDialog(QDialog):
         vehicles = self.db.get_all_reentry_vehicles()
         vehicle = next((v for v in vehicles if v['vehicle_id'] == self.vehicle_id), None)
         
-        if vehicle:
-            self.name_edit.setText(vehicle.get('name', ''))
-            self.alternative_name_edit.setText(vehicle.get('alternative_name', ''))
-            self.family_edit.setText(vehicle.get('family', ''))
-            self.variant_edit.setText(vehicle.get('variant', ''))
-            self.manufacturer_edit.setText(vehicle.get('manufacturer', ''))
-            self.country_edit.setText(vehicle.get('country', ''))
-            
-            payload = vehicle.get('payload')
-            if payload:
+        if not vehicle:
+            QMessageBox.critical(self, "Error", f"Could not find re-entry vehicle with ID {self.vehicle_id}")
+            self.reject()
+            return
+        
+        # Helper function to safely convert values to strings
+        def safe_str(value):
+            return str(value) if value is not None else ''
+        
+        self.name_edit.setText(safe_str(vehicle.get('name', '')))
+        self.alternative_name_edit.setText(safe_str(vehicle.get('alternative_name', '')))
+        self.family_edit.setText(safe_str(vehicle.get('family', '')))
+        self.variant_edit.setText(safe_str(vehicle.get('variant', '')))
+        self.manufacturer_edit.setText(safe_str(vehicle.get('manufacturer', '')))
+        self.country_edit.setText(safe_str(vehicle.get('country', '')))
+        
+        payload = vehicle.get('payload')
+        if payload:
+            try:
                 self.payload_spin.setValue(int(payload))
-            
-            self.decelerator_edit.setText(vehicle.get('decelerator', ''))
-            self.remarks_edit.setPlainText(vehicle.get('remarks', ''))
+            except (ValueError, TypeError):
+                self.payload_spin.setValue(0)
+        
+        self.decelerator_edit.setText(safe_str(vehicle.get('decelerator', '')))
+        self.remarks_edit.setPlainText(safe_str(vehicle.get('remarks', '')))
     
     def save_vehicle(self):
         """Save the re-entry vehicle"""
