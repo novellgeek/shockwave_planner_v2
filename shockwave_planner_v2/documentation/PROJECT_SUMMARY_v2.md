@@ -34,7 +34,13 @@ shockwave_v2/
 │   ├── main_window.py      # Enhanced main window
 │   ├── timeline_view.py    # Launch timeline
 │   ├── timeline_view_reentry.py  # Re-entry timeline (FIXED)
-│   └── enhanced_list_view.py     # List view
+│   ├── enhanced_list_view.py     # List view
+│   ├── statistics_view.py        # Statistics tab (NEW in v2.1)
+│   ├── launch_sites_view.py      # Launch sites management
+│   ├── drop_zones_view.py        # Re-entry drop zones
+│   ├── rockets_view.py           # Launch vehicles management
+│   ├── reentry_vehicles_view.py  # Re-entry vehicles management
+│   └── reentry_dialog.py         # Re-entry operations dialog
 ├── data/                    # All data operations
 │   ├── database.py         # Database layer (ENHANCED)
 │   └── space_devs.py       # API integration (NEW)
@@ -71,6 +77,34 @@ shockwave_v2/
 # Command line:
 python3 data/space_devs.py upcoming 100
 ```
+
+---
+
+### 2.5 **Code Architecture Improvements** (v2.1)
+
+**Enhancement**: Extracted statistics tab into separate module for better maintainability
+
+**Before (v2.0):**
+- Statistics code embedded in `main_window.py` (~60 lines)
+- Created/destroyed widget on every refresh
+- Difficult to modify and extend
+
+**After (v2.1):**
+- New `gui/statistics_view.py` module (~95 lines)
+- Consistent with other view modules
+- Efficient refresh without recreation
+- Easy to extend with new statistics
+
+**Benefits:**
+- ✅ Cleaner main_window.py (reduced by 60 lines)
+- ✅ Modular architecture (matches other tabs)
+- ✅ Better performance (refresh vs recreate)
+- ✅ Easier maintenance and customization
+- ✅ Consistent code patterns
+
+**Modified Files:**
+- `gui/statistics_view.py` - NEW module
+- `gui/main_window.py` - Removed embedded statistics code, added import
 
 ---
 
@@ -206,13 +240,13 @@ shockwave_v2/
 ```
 
 ### File Count
-- **Source Files**: 8 Python modules
+- **Source Files**: 11 Python modules (GUI) + 2 data modules
 - **Documentation**: 5 complete guides
 - **Resources**: 1 splash screen
 - **Database**: 1 SQLite file
 - **Scripts**: 1 startup script
 
-**Total Lines of Code**: ~3,500 lines
+**Total Lines of Code**: ~4,000 lines
 **Total Documentation**: ~5,000 lines
 
 ---
@@ -460,9 +494,10 @@ Easy to modify:
 ## 🏆 Project Statistics
 
 ### Development
-- **Time**: Full day development
-- **Files Created**: 15+
-- **Code Lines**: ~3,500
+- **Time**: Full day development + ongoing improvements
+- **Version**: v2.1 (December 2025)
+- **Files Created**: 18+
+- **Code Lines**: ~4,000
 - **Documentation Lines**: ~5,000
 - **Testing**: Comprehensive
 
@@ -471,6 +506,7 @@ Easy to modify:
 - **Features**: ⭐⭐⭐⭐⭐ Complete
 - **Documentation**: ⭐⭐⭐⭐⭐ Comprehensive
 - **Stability**: ⭐⭐⭐⭐⭐ Production ready
+- **Maintainability**: ⭐⭐⭐⭐⭐ Well-structured
 
 ---
 
