@@ -255,6 +255,37 @@ class LaunchDatabase:
             ''')
             self.conn.commit()
             print("   ✓ Migration complete")
+        
+        # Migration: Add additional rocket fields
+        try:
+            cursor.execute("SELECT alternative_name FROM rockets LIMIT 1")
+        except sqlite3.OperationalError:
+            print("🔧 Running migration: Adding additional rocket fields...")
+            cursor.execute('ALTER TABLE rockets ADD COLUMN alternative_name TEXT')
+            self.conn.commit()
+            print("   ✓ Added alternative_name")
+        
+        try:
+            cursor.execute("SELECT boosters FROM rockets LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute('ALTER TABLE rockets ADD COLUMN boosters TEXT')
+            self.conn.commit()
+            print("   ✓ Added boosters")
+        
+        try:
+            cursor.execute("SELECT payload_sso FROM rockets LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute('ALTER TABLE rockets ADD COLUMN payload_sso TEXT')
+            self.conn.commit()
+            print("   ✓ Added payload_sso")
+        
+        try:
+            cursor.execute("SELECT payload_tli FROM rockets LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute('ALTER TABLE rockets ADD COLUMN payload_tli TEXT')
+            self.conn.commit()
+            print("   ✓ Added payload_tli")
+            print("   ✓ Rocket fields migration complete")
 
     
     # ==================== SITE OPERATIONS ====================
@@ -447,8 +478,8 @@ class LaunchDatabase:
         """Get all rockets"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT rocket_id, name, family, variant, manufacturer, country,
-                   payload_leo, payload_gto
+            SELECT rocket_id, name, alternative_name, family, variant, manufacturer, country,
+                   stages, boosters, payload_leo, payload_sso, payload_gto, payload_tli
             FROM rockets
             ORDER BY name
         ''')
@@ -458,21 +489,26 @@ class LaunchDatabase:
         """Add a new rocket"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            INSERT INTO rockets (name, family, variant, manufacturer, country,
-                               payload_leo, payload_gto, height, diameter, mass, stages, external_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO rockets (name, alternative_name, family, variant, manufacturer, country,
+                               stages, boosters, payload_leo, payload_sso, payload_gto, payload_tli,
+                               height, diameter, mass, external_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             rocket_data['name'],
+            rocket_data.get('alternative_name'),
             rocket_data.get('family'),
             rocket_data.get('variant'),
             rocket_data.get('manufacturer'),
             rocket_data.get('country'),
+            rocket_data.get('stages'),
+            rocket_data.get('boosters'),
             rocket_data.get('payload_leo'),
+            rocket_data.get('payload_sso'),
             rocket_data.get('payload_gto'),
+            rocket_data.get('payload_tli'),
             rocket_data.get('height'),
             rocket_data.get('diameter'),
             rocket_data.get('mass'),
-            rocket_data.get('stages'),
             rocket_data.get('external_id')
         ))
         self.conn.commit()
@@ -483,22 +519,27 @@ class LaunchDatabase:
         cursor = self.conn.cursor()
         cursor.execute('''
             UPDATE rockets SET
-                name = ?, family = ?, variant = ?, manufacturer = ?,
-                country = ?, payload_leo = ?, payload_gto = ?,
-                height = ?, diameter = ?, mass = ?, stages = ?
+                name = ?, alternative_name = ?, family = ?, variant = ?, manufacturer = ?,
+                country = ?, stages = ?, boosters = ?, 
+                payload_leo = ?, payload_sso = ?, payload_gto = ?, payload_tli = ?,
+                height = ?, diameter = ?, mass = ?
             WHERE rocket_id = ?
         ''', (
             rocket_data['name'],
+            rocket_data.get('alternative_name'),
             rocket_data.get('family'),
             rocket_data.get('variant'),
             rocket_data.get('manufacturer'),
             rocket_data.get('country'),
+            rocket_data.get('stages'),
+            rocket_data.get('boosters'),
             rocket_data.get('payload_leo'),
+            rocket_data.get('payload_sso'),
             rocket_data.get('payload_gto'),
+            rocket_data.get('payload_tli'),
             rocket_data.get('height'),
             rocket_data.get('diameter'),
             rocket_data.get('mass'),
-            rocket_data.get('stages'),
             rocket_id
         ))
         self.conn.commit()
@@ -535,7 +576,7 @@ class LaunchDatabase:
         """Get all re-entry vehicles"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT vehicle_id as reentry_vehicle_id, name, alternative_name, family, variant,
+            SELECT vehicle_id, name, alternative_name, family, variant,
                    manufacturer, country, payload, decelerator, remarks, external_id
             FROM reentry_vehicle
             ORDER BY name
