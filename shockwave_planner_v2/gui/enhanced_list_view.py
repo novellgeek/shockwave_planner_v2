@@ -217,6 +217,12 @@ class EnhancedListView(QWidget):
             notam_item = create_centered_item(launch.get('notam_reference', ''))
             if launch.get('notam_reference'):
                 notam_item.setBackground(QColor(255, 255, 200))  # Light yellow highlight
+                notam_item.setText("✔")
+                
+                # TODO implement tooltip (fetch NOTAM data from DB. Concatenate into single string and insert into tooltip)
+                # notam_item.setToolTip()
+            else:
+                notam_item.setText("X")
             self.launch_table.setItem(row, 8, notam_item)
             
             # Status
