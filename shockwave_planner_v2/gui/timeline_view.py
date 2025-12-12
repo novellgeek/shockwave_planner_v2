@@ -125,7 +125,8 @@ class TimelineView(QWidget):
                     'pad': site['launch_pad'],
                     'site_id': site['site_id'],
                     'turnaround_days': site.get('turnaround_days', self.pad_turnaround_days),
-                    'launches': site_launches.get(site_key, [])
+                    'launches': site_launches.get(site_key, []),
+                    'prev_month_launches': site_prev_launches.get(site_key, [])  # For turnaround carry-over
                 })
         
         # Build rows for display
@@ -232,6 +233,8 @@ class TimelineView(QWidget):
                         # Check for turnaround period using site-specific turnaround
                         in_turnaround = False
                         site_turnaround = row_data.get('turnaround_days', self.pad_turnaround_days)
+                        
+                        # Check launches in current month
                         for launch in row_data['launches']:
                             launch_day = datetime.strptime(launch['launch_date'], '%Y-%m-%d').day
                             if launch_day < col_day <= launch_day + site_turnaround:
