@@ -7,7 +7,7 @@ Date: December 2025
 """
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QTextEdit, QComboBox, QDateEdit, QTimeEdit,
-                             QPushButton, QMessageBox, QLabel, QDoubleSpinBox)
+                             QPushButton, QMessageBox, QLabel, QDoubleSpinBox, QSpinBox)
 from PyQt6.QtCore import QDate, QTime, Qt
 from datetime import datetime
 
@@ -60,12 +60,13 @@ class ReentryDialog(QDialog):
         # Re-entry site
         self.site_combo = QComboBox()
         self.site_combo.setEditable(True)
-        reentry_sites = self.db.get_all_sites(site_type='REENTRY')
+        # FIXED: Use get_all_reentry_sites() instead of get_all_sites()
+        reentry_sites = self.db.get_all_reentry_sites()
         for site in reentry_sites:
             location = site.get('location', '')
-            drop_zone = site.get('drop_zone', site.get('launch_pad', ''))
+            drop_zone = site.get('drop_zone', '')
             display = f"{location} - {drop_zone}"
-            # Fixed: use 'site_id' instead of 'reentry_site_id'
+            # FIXED: use 'site_id' which is aliased from reentry_site_id
             self.site_combo.addItem(display, site['site_id'])
         form.addRow("Re-entry Site:", self.site_combo)
         
@@ -150,6 +151,14 @@ class ReentryDialog(QDialog):
         country_edit.setPlaceholderText("e.g., USA, Russia, International Waters")
         layout.addRow("Country/Region:", country_edit)
         
+        # Add turnaround days field
+        turnaround_spin = QSpinBox()
+        turnaround_spin.setRange(1, 90)
+        turnaround_spin.setValue(7)
+        turnaround_spin.setSuffix(" days")
+        turnaround_spin.setToolTip("Number of days required for zone recovery/cleanup after re-entry")
+        layout.addRow("Zone Recovery:", turnaround_spin)
+        
         lat_spin = QDoubleSpinBox()
         lat_spin.setRange(-90, 90)
         lat_spin.setDecimals(4)
@@ -187,6 +196,7 @@ class ReentryDialog(QDialog):
                 'location': location_edit.text().strip(),
                 'drop_zone': dropzone_edit.text().strip() or 'Primary',
                 'country': country_edit.text().strip() or None,
+                'turnaround_days': turnaround_spin.value(),
                 'latitude': lat_spin.value() if lat_spin.value() != 0 else None,
                 'longitude': lon_spin.value() if lon_spin.value() != 0 else None,
                 'zone_type': zone_type_combo.currentText()
@@ -303,6 +313,7 @@ class ReentryDialog(QDialog):
                 'location': location,
                 'drop_zone': drop_zone,
                 'country': None,
+                'turnaround_days': 7,
                 'latitude': None,
                 'longitude': None,
                 'zone_type': 'Unknown'

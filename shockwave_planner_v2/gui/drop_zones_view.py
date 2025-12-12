@@ -65,14 +65,15 @@ class DropZonesView(QWidget):
     
     def refresh_table(self):
         """Refresh the zones table"""
-        zones = self.db.get_all_sites(site_type='REENTRY')
+        # FIXED: Use get_all_reentry_sites() instead of get_all_sites()
+        zones = self.db.get_all_reentry_sites()
         
         self.table.setRowCount(len(zones))
         
         for row, zone in enumerate(zones):
             self.table.setItem(row, 0, QTableWidgetItem(str(zone.get('site_id', ''))))
             self.table.setItem(row, 1, QTableWidgetItem(zone.get('location', '')))
-            self.table.setItem(row, 2, QTableWidgetItem(zone.get('launch_pad', '')))  # launch_pad is aliased to drop_zone
+            self.table.setItem(row, 2, QTableWidgetItem(zone.get('drop_zone', '')))
             self.table.setItem(row, 3, QTableWidgetItem(zone.get('country', '')))
             
             # Recovery time
@@ -128,7 +129,8 @@ class DropZonesView(QWidget):
         
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                self.db.delete_site(zone_id, site_type='REENTRY')
+                # FIXED: Use delete_reentry_site() instead of delete_site()
+                self.db.delete_reentry_site(zone_id)
                 self.refresh_table()
                 if self.window():
                     self.window().refresh_all()
@@ -212,12 +214,13 @@ class ZoneEditorDialog(QDialog):
     
     def load_zone_data(self):
         """Load existing zone data"""
-        zones = self.db.get_all_sites(site_type='REENTRY')
+        # FIXED: Use get_all_reentry_sites() instead of get_all_sites()
+        zones = self.db.get_all_reentry_sites()
         zone = next((z for z in zones if z['site_id'] == self.zone_id), None)
         
         if zone:
             self.location_edit.setText(zone.get('location', ''))
-            self.zone_edit.setText(zone.get('launch_pad', ''))  # launch_pad is aliased to drop_zone
+            self.zone_edit.setText(zone.get('drop_zone', ''))
             self.country_edit.setText(zone.get('country', ''))
             
             # Recovery time
@@ -251,16 +254,17 @@ class ZoneEditorDialog(QDialog):
             'turnaround_days': self.recovery_spin.value(),
             'latitude': self.lat_spin.value() if self.lat_spin.value() != 0 else None,
             'longitude': self.lon_spin.value() if self.lon_spin.value() != 0 else None,
-            'zone_type': self.zone_type_edit.text().strip() or None,
-            'site_type': 'REENTRY'
+            'zone_type': self.zone_type_edit.text().strip() or None
         }
         
         try:
             if self.zone_id:
-                self.db.update_site(self.zone_id, zone_data)
+                # FIXED: Use update_reentry_site() instead of update_site()
+                self.db.update_reentry_site(self.zone_id, zone_data)
                 QMessageBox.information(self, "Success", "Drop zone updated successfully!")
             else:
-                self.db.add_site(zone_data, site_type='REENTRY')
+                # FIXED: Use add_reentry_site() instead of add_site()
+                self.db.add_reentry_site(zone_data)
                 QMessageBox.information(self, "Success", "Drop zone added successfully!")
             
             self.accept()

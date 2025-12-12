@@ -1334,8 +1334,8 @@ class LaunchDatabase:
         cursor.execute('''
             INSERT INTO reentry_sites (
                 location, drop_zone, latitude, longitude,
-                country, zone_type, external_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                country, zone_type, external_id, turnaround_days
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             site_data['location'],
             site_data['drop_zone'],
@@ -1343,7 +1343,8 @@ class LaunchDatabase:
             site_data.get('longitude'),
             site_data.get('country'),
             site_data.get('zone_type'),
-            site_data.get('external_id')
+            site_data.get('external_id'),
+            site_data.get('turnaround_days', 7)
         ))
         self.conn.commit()
         return cursor.lastrowid
@@ -1388,6 +1389,105 @@ class LaunchDatabase:
             ORDER BY re.reentry_date, re.reentry_time
         ''', (str(year), f'{month:02d}'))
         
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def get_all_reentry_sites(self) -> List[Dict]:
+        """Get all re-entry sites from reentry_sites table"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT reentry_site_id as site_id, 
+                   location, 
+                   drop_zone as launch_pad,
+                   drop_zone,
+                   latitude, 
+                   longitude, 
+                   country,
+                   zone_type,
+                   turnaround_days,
+                   external_id
+            FROM reentry_sites
+            ORDER BY country, location, drop_zone
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def update_reentry_site(self, site_id: int, site_data: Dict):
+        """Update an existing re-entry site"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE reentry_sites SET
+                location = ?,
+                drop_zone = ?,
+                latitude = ?,
+                longitude = ?,
+                country = ?,
+                zone_type = ?,
+                turnaround_days = ?
+            WHERE reentry_site_id = ?
+        ''', (
+            site_data['location'],
+            site_data['drop_zone'],
+            site_data.get('latitude'),
+            site_data.get('longitude'),
+            site_data.get('country'),
+            site_data.get('zone_type'),
+            site_data.get('turnaround_days', 7),
+            site_id
+        ))
+        self.conn.commit()
+    
+    def delete_reentry_site(self, site_id: int):
+        """Delete a re-entry site"""
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM reentry_sites WHERE reentry_site_id = ?', (site_id,))
+        self.conn.commit()
+    
+    def update_reentry(self, reentry_id: int, reentry_data: Dict):
+        """Update an existing re-entry record"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE reentries SET
+                launch_id = ?,
+                reentry_date = ?,
+                reentry_time = ?,
+                reentry_site_id = ?,
+                vehicle_component = ?,
+                reentry_type = ?,
+                status_id = ?,
+                remarks = ?
+            WHERE reentry_id = ?
+        ''', (
+            reentry_data.get('launch_id'),
+            reentry_data['reentry_date'],
+            reentry_data.get('reentry_time'),
+            reentry_data.get('reentry_site_id'),
+            reentry_data.get('vehicle_component'),
+            reentry_data.get('reentry_type'),
+            reentry_data.get('status_id'),
+            reentry_data.get('remarks'),
+            reentry_id
+        ))
+        self.conn.commit()
+    
+    def delete_reentry(self, reentry_id: int):
+        """Delete a re-entry record"""
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM reentries WHERE reentry_id = ?', (reentry_id,))
+        self.conn.commit()
+    
+    def get_all_reentries(self) -> List[Dict]:
+        """Get all re-entries"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT re.*, 
+                   rs.location, rs.drop_zone,
+                   l.mission_name, l.payload_name,
+                   st.status_name, st.status_color
+            FROM reentries re
+            LEFT JOIN reentry_sites rs ON re.reentry_site_id = rs.reentry_site_id
+            LEFT JOIN launches l ON re.launch_id = l.launch_id
+            LEFT JOIN launch_status st ON re.status_id = st.status_id
+            ORDER BY re.reentry_date DESC, re.reentry_time DESC
+        ''')
         return [dict(row) for row in cursor.fetchall()]
     
     # ==================== SYNC OPERATIONS (NEW in v2.0) ====================

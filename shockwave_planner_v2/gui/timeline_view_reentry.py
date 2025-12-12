@@ -111,7 +111,8 @@ class ReentryTimelineView(QWidget):
             zone_prev_reentries[key].append(reentry)
         
         # Get all re-entry sites and group by country
-        all_sites = self.db.get_all_sites(site_type='REENTRY')
+        # FIXED: Use get_all_reentry_sites() instead of get_all_sites()
+        all_sites = self.db.get_all_reentry_sites()
         country_zones_map = {}
         
         for zone in all_sites:
@@ -122,7 +123,7 @@ class ReentryTimelineView(QWidget):
             if country not in country_zones_map:
                 country_zones_map[country] = []
             
-            zone_key = (zone['location'], zone.get('launch_pad', 'Unknown'))
+            zone_key = (zone['location'], zone.get('drop_zone', 'Unknown'))
             has_reentries = zone_key in zone_reentries
             
             if has_reentries or not self.show_only_active:
@@ -130,7 +131,7 @@ class ReentryTimelineView(QWidget):
                     'type': 'zone',
                     'country': country,
                     'location': zone['location'],
-                    'drop_zone': zone.get('launch_pad', 'Unknown'),
+                    'drop_zone': zone.get('drop_zone', 'Unknown'),
                     'site_id': zone['site_id'],
                     'turnaround_days': zone.get('turnaround_days', self.zone_turnaround_days),
                     'reentries': zone_reentries.get(zone_key, []),
