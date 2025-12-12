@@ -12,12 +12,10 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 
-DEFAULT_DB_PATH = r'./shockwave_planner_v2/shockwave_planner.db'
-
 class LaunchDatabase:
     """Database operations for SHOCKWAVE PLANNER"""
     
-    def __init__(self, db_path: str = DEFAULT_DB_PATH):
+    def __init__(self, db_path: str = 'shockwave_planner.db'):
         """Initialize database connection"""
         self.db_path = db_path
         self.conn = sqlite3.connect(db_path)
@@ -564,6 +562,62 @@ class LaunchDatabase:
         ))
         self.conn.commit()
     
+    def update_rocket_preserve_manual(self, rocket_id: int, rocket_data: Dict):
+        """Update rocket but preserve manually entered fields if API data is missing
+        This is used during Space Devs sync to avoid overwriting manual data"""
+        cursor = self.conn.cursor()
+        
+        # Get current rocket data
+        cursor.execute('SELECT * FROM rockets WHERE rocket_id = ?', (rocket_id,))
+        current = dict(cursor.fetchone())
+        
+        # Only update fields that are provided in rocket_data
+        # If a field is None in rocket_data, keep the current value
+        update_data = {
+            'name': rocket_data.get('name') or current['name'],
+            'alternative_name': rocket_data.get('alternative_name') or current['alternative_name'],
+            'family': rocket_data.get('family') or current['family'],
+            'variant': rocket_data.get('variant') or current['variant'],
+            'manufacturer': rocket_data.get('manufacturer') or current['manufacturer'],
+            'country': rocket_data.get('country') or current['country'],
+            'stages': rocket_data.get('stages') or current['stages'],
+            'boosters': rocket_data.get('boosters') or current['boosters'],
+            'payload_leo': rocket_data.get('payload_leo') or current['payload_leo'],
+            'payload_sso': rocket_data.get('payload_sso') or current['payload_sso'],
+            'payload_gto': rocket_data.get('payload_gto') or current['payload_gto'],
+            'payload_tli': rocket_data.get('payload_tli') or current['payload_tli'],
+            'height': rocket_data.get('height') or current['height'],
+            'diameter': rocket_data.get('diameter') or current['diameter'],
+            'mass': rocket_data.get('mass') or current['mass']
+        }
+        
+        cursor.execute('''
+            UPDATE rockets SET
+                name = ?, alternative_name = ?, family = ?, variant = ?, manufacturer = ?,
+                country = ?, stages = ?, boosters = ?, 
+                payload_leo = ?, payload_sso = ?, payload_gto = ?, payload_tli = ?,
+                height = ?, diameter = ?, mass = ?
+            WHERE rocket_id = ?
+        ''', (
+            update_data['name'],
+            update_data['alternative_name'],
+            update_data['family'],
+            update_data['variant'],
+            update_data['manufacturer'],
+            update_data['country'],
+            update_data['stages'],
+            update_data['boosters'],
+            update_data['payload_leo'],
+            update_data['payload_sso'],
+            update_data['payload_gto'],
+            update_data['payload_tli'],
+            update_data['height'],
+            update_data['diameter'],
+            update_data['mass'],
+            rocket_id
+        ))
+        self.conn.commit()
+    
     def delete_rocket(self, rocket_id: int):
         """Delete a rocket"""
         cursor = self.conn.cursor()
@@ -878,15 +932,23 @@ class LaunchDatabase:
         cursor.execute('SELECT COUNT(*) FROM launches')
         total = cursor.fetchone()[0]
         
-        # Success/failure counts
-        cursor.execute('SELECT COUNT(*) FROM launches WHERE success = 1')
+        # Success/failure counts using status_name
+        cursor.execute('''
+            SELECT COUNT(*) FROM launches l
+            LEFT JOIN launch_status s ON l.status_id = s.status_id
+            WHERE s.status_name = 'Success'
+        ''')
         successful = cursor.fetchone()[0]
         
-        cursor.execute('SELECT COUNT(*) FROM launches WHERE success = 0 AND success IS NOT NULL')
+        cursor.execute('''
+            SELECT COUNT(*) FROM launches l
+            LEFT JOIN launch_status s ON l.status_id = s.status_id
+            WHERE s.status_name IN ('Failure', 'Partial Failure')
+        ''')
         failed = cursor.fetchone()[0]
         
-        cursor.execute('SELECT COUNT(*) FROM launches WHERE success IS NULL')
-        pending = cursor.fetchone()[0]
+        # Pending (everything else)
+        pending = total - successful - failed
         
         # Top rockets
         cursor.execute('''
@@ -917,6 +979,58 @@ class LaunchDatabase:
             'by_rocket': by_rocket,
             'by_site': by_site
         }
+    
+    def get_yearly_statistics(self, years: int = 5) -> List[Dict]:
+        """Get launch statistics by year for the past N years"""
+        cursor = self.conn.cursor()
+        
+        stats_by_year = []
+        current_year = datetime.now().year
+        
+        for year in range(current_year - years + 1, current_year + 1):
+            # Total launches for the year
+            cursor.execute('''
+                SELECT COUNT(*) FROM launches 
+                WHERE strftime('%Y', launch_date) = ?
+            ''', (str(year),))
+            total = cursor.fetchone()[0]
+            
+            # Successful launches (status_name = 'Success')
+            cursor.execute('''
+                SELECT COUNT(*) FROM launches l
+                LEFT JOIN launch_status s ON l.status_id = s.status_id
+                WHERE strftime('%Y', l.launch_date) = ? 
+                AND s.status_name = 'Success'
+            ''', (str(year),))
+            successful = cursor.fetchone()[0]
+            
+            # Failed launches (status_name = 'Failure' or 'Partial Failure')
+            cursor.execute('''
+                SELECT COUNT(*) FROM launches l
+                LEFT JOIN launch_status s ON l.status_id = s.status_id
+                WHERE strftime('%Y', l.launch_date) = ? 
+                AND (s.status_name = 'Failure' OR s.status_name = 'Partial Failure')
+            ''', (str(year),))
+            failed = cursor.fetchone()[0]
+            
+            # Pending launches (everything else)
+            pending = total - successful - failed
+            
+            # Calculate success rate
+            success_rate = 0
+            if successful + failed > 0:
+                success_rate = (successful / (successful + failed)) * 100
+            
+            stats_by_year.append({
+                'year': year,
+                'total': total,
+                'successful': successful,
+                'failed': failed,
+                'pending': pending,
+                'success_rate': success_rate
+            })
+        
+        return stats_by_year
     
     # ==================== RE-ENTRY OPERATIONS (NEW in v2.0) ====================
     

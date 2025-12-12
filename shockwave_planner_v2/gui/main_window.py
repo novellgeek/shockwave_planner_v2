@@ -760,6 +760,9 @@ class MainWindow(QMainWindow):
     
     def refresh_all(self):
         """Refresh all views"""
+        # Update all pad turnarounds from launch history
+        self.db.update_all_pad_turnarounds_from_history()
+        
         self.timeline_view.update_timeline()
         self.reentry_timeline_view.update_timeline()
         self.list_view.refresh()
