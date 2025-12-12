@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 
-DEFAULT_DB_PATH = r'./shockwave_planner_v2/shockwave_planner.db'
+DEFAULT_DB_PATH = 'shockwave_planner.db'
 
 class LaunchDatabase:
     """Database operations for SHOCKWAVE PLANNER"""
@@ -227,6 +227,13 @@ class LaunchDatabase:
             VALUES (?, ?, ?, ?)
         ''', statuses)
         self.conn.commit()
+    
+    def get_status_id_by_name(self, status_name: str) -> Optional[int]:
+        """Get status_id by status name"""
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT status_id FROM launch_status WHERE status_name = ?', (status_name,))
+        result = cursor.fetchone()
+        return result[0] if result else None
     
     def _run_migrations(self):
         """Run database migrations for schema updates"""
@@ -1016,6 +1023,309 @@ class LaunchDatabase:
         
         return stats_by_year
     
+    # ==================== CHART DATA METHODS (NEW in v2.0) ====================
+    
+    def get_countries(self) -> List[str]:
+        """Get list of all countries with launches"""
+        cursor = self.conn.cursor()
+        
+        # Get countries from launch_sites
+        cursor.execute('''
+            SELECT DISTINCT ls.country
+            FROM launch_sites ls
+            INNER JOIN launches l ON ls.site_id = l.site_id
+            WHERE ls.country IS NOT NULL AND ls.country != ''
+            ORDER BY ls.country
+        ''')
+        
+        countries = [row[0] for row in cursor.fetchall()]
+        return countries
+    
+    def get_launch_sites_by_country(self, country: str = None) -> List[str]:
+        """Get launch sites, optionally filtered by country"""
+        cursor = self.conn.cursor()
+        
+        if country:
+            cursor.execute('''
+                SELECT DISTINCT ls.location
+                FROM launch_sites ls
+                INNER JOIN launches l ON ls.site_id = l.site_id
+                WHERE ls.country = ?
+                ORDER BY ls.location
+            ''', (country,))
+        else:
+            cursor.execute('''
+                SELECT DISTINCT ls.location
+                FROM launch_sites ls
+                INNER JOIN launches l ON ls.site_id = l.site_id
+                ORDER BY ls.location
+            ''')
+        
+        sites = [row[0] for row in cursor.fetchall()]
+        return sites
+    
+    def get_rockets_by_country(self, country: str = None) -> List[str]:
+        """Get rockets, optionally filtered by country"""
+        cursor = self.conn.cursor()
+        
+        if country:
+            cursor.execute('''
+                SELECT DISTINCT r.name
+                FROM rockets r
+                INNER JOIN launches l ON r.rocket_id = l.rocket_id
+                WHERE r.country = ?
+                ORDER BY r.name
+            ''', (country,))
+        else:
+            cursor.execute('''
+                SELECT DISTINCT r.name
+                FROM rockets r
+                INNER JOIN launches l ON r.rocket_id = l.rocket_id
+                ORDER BY r.name
+            ''')
+        
+        rockets = [row[0] for row in cursor.fetchall()]
+        return rockets
+    
+    def get_launch_data_monthly(self, year: int, country: str = None, 
+                                site: str = None, rocket: str = None) -> Tuple[List[int], List[int]]:
+        """
+        Get monthly launch counts for a specific year with optional filters
+        
+        Args:
+            year: Year to get data for
+            country: Optional country filter
+            site: Optional launch site filter
+            rocket: Optional rocket filter
+        
+        Returns:
+            tuple: (months list, counts list) where months are 1-12
+        """
+        cursor = self.conn.cursor()
+        
+        # Build query dynamically based on filters
+        query = '''
+            SELECT strftime('%m', l.launch_date) as month, COUNT(*) as count
+            FROM launches l
+        '''
+        
+        joins = []
+        conditions = ["strftime('%Y', l.launch_date) = ?"]
+        params = [str(year)]
+        
+        # Add joins and conditions based on filters
+        if country or site:
+            joins.append("INNER JOIN launch_sites ls ON l.site_id = ls.site_id")
+            if country:
+                conditions.append("ls.country = ?")
+                params.append(country)
+            if site:
+                conditions.append("ls.location = ?")
+                params.append(site)
+        
+        if rocket:
+            joins.append("INNER JOIN rockets r ON l.rocket_id = r.rocket_id")
+            conditions.append("r.name = ?")
+            params.append(rocket)
+        
+        # Combine query parts
+        if joins:
+            query += " " + " ".join(joins)
+        query += " WHERE " + " AND ".join(conditions)
+        query += " GROUP BY month ORDER BY month"
+        
+        cursor.execute(query, params)
+        results = cursor.fetchall()
+        
+        # Create full 12-month data (fill missing months with 0)
+        month_counts = {int(row[0]): row[1] for row in results}
+        months = list(range(1, 13))
+        counts = [month_counts.get(m, 0) for m in months]
+        
+        return months, counts
+    
+    def get_launch_data_daily(self, year: int, num_months: int, 
+                              country: str = None, site: str = None, 
+                              rocket: str = None) -> Tuple[List[str], List[int]]:
+        """
+        Get daily launch counts for specified number of months from current date
+        
+        Args:
+            year: Year to get data for
+            num_months: Number of months to include
+            country: Optional country filter
+            site: Optional launch site filter
+            rocket: Optional rocket filter
+        
+        Returns:
+            tuple: (dates list, counts list)
+        """
+        from datetime import timedelta
+        cursor = self.conn.cursor()
+        
+        # Calculate date range (ending at current date in the specified year)
+        current_date = datetime.now()
+        if year == current_date.year:
+            end_date = current_date
+        else:
+            # For past years, use end of year
+            end_date = datetime(year, 12, 31)
+        
+        start_date = end_date - timedelta(days=num_months * 30)
+        
+        # Build query dynamically
+        query = '''
+            SELECT l.launch_date, COUNT(*) as count
+            FROM launches l
+        '''
+        
+        joins = []
+        conditions = [
+            "l.launch_date >= ?",
+            "l.launch_date <= ?",
+            "strftime('%Y', l.launch_date) = ?"
+        ]
+        params = [
+            start_date.strftime('%Y-%m-%d'),
+            end_date.strftime('%Y-%m-%d'),
+            str(year)
+        ]
+        
+        # Add joins and conditions based on filters
+        if country or site:
+            joins.append("INNER JOIN launch_sites ls ON l.site_id = ls.site_id")
+            if country:
+                conditions.append("ls.country = ?")
+                params.append(country)
+            if site:
+                conditions.append("ls.location = ?")
+                params.append(site)
+        
+        if rocket:
+            joins.append("INNER JOIN rockets r ON l.rocket_id = r.rocket_id")
+            conditions.append("r.name = ?")
+            params.append(rocket)
+        
+        # Combine query parts
+        if joins:
+            query += " " + " ".join(joins)
+        query += " WHERE " + " AND ".join(conditions)
+        query += " GROUP BY l.launch_date ORDER BY l.launch_date"
+        
+        cursor.execute(query, params)
+        results = cursor.fetchall()
+        
+        # Create continuous date range with all days
+        date_counts = {row[0]: row[1] for row in results}
+        
+        dates = []
+        counts = []
+        current = start_date
+        while current <= end_date:
+            date_str = current.strftime('%Y-%m-%d')
+            dates.append(current.strftime('%m-%d'))  # Format as MM-DD for display
+            counts.append(date_counts.get(date_str, 0))
+            current += timedelta(days=1)
+        
+        return dates, counts
+    
+    def get_launch_data_daily_by_month(self, year: int, start_month: int, num_months: int,
+                                        country: str = None, site: str = None, 
+                                        rocket: str = None) -> Tuple[List[str], List[int], str]:
+        """
+        Get daily launch counts for specified month range
+        
+        Args:
+            year: Year to get data for
+            start_month: Starting month (1-12)
+            num_months: Number of months to include (1 or 3)
+            country: Optional country filter
+            site: Optional launch site filter
+            rocket: Optional rocket filter
+        
+        Returns:
+            tuple: (dates list as day numbers, counts list, date_range_string)
+        """
+        from datetime import timedelta
+        import calendar
+        cursor = self.conn.cursor()
+        
+        # Calculate date range based on selected month and number of months
+        start_date = datetime(year, start_month, 1)
+        
+        # Calculate end date
+        end_month = start_month + num_months - 1
+        end_year = year
+        if end_month > 12:
+            end_month = end_month - 12
+            end_year = year + 1
+        
+        # Get last day of the end month
+        last_day = calendar.monthrange(end_year, end_month)[1]
+        end_date = datetime(end_year, end_month, last_day)
+        
+        # Build query dynamically
+        query = '''
+            SELECT l.launch_date, COUNT(*) as count
+            FROM launches l
+        '''
+        
+        joins = []
+        conditions = [
+            "l.launch_date >= ?",
+            "l.launch_date <= ?"
+        ]
+        params = [
+            start_date.strftime('%Y-%m-%d'),
+            end_date.strftime('%Y-%m-%d')
+        ]
+        
+        # Add joins and conditions based on filters
+        if country or site:
+            joins.append("INNER JOIN launch_sites ls ON l.site_id = ls.site_id")
+            if country:
+                conditions.append("ls.country = ?")
+                params.append(country)
+            if site:
+                conditions.append("ls.location = ?")
+                params.append(site)
+        
+        if rocket:
+            joins.append("INNER JOIN rockets r ON l.rocket_id = r.rocket_id")
+            conditions.append("r.name = ?")
+            params.append(rocket)
+        
+        # Combine query parts
+        if joins:
+            query += " " + " ".join(joins)
+        query += " WHERE " + " AND ".join(conditions)
+        query += " GROUP BY l.launch_date ORDER BY l.launch_date"
+        
+        cursor.execute(query, params)
+        results = cursor.fetchall()
+        
+        # Create continuous date range with all days
+        date_counts = {row[0]: row[1] for row in results}
+        
+        dates = []
+        counts = []
+        current = start_date
+        while current <= end_date:
+            date_str = current.strftime('%Y-%m-%d')
+            dates.append(str(current.day))  # Just the day number
+            counts.append(date_counts.get(date_str, 0))
+            current += timedelta(days=1)
+        
+        # Create date range string for display
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        if num_months == 1:
+            date_range = f"{month_names[start_month-1]} {year}"
+        else:
+            date_range = f"{month_names[start_month-1]} - {month_names[end_month-1]} {year}"
+        
+        return dates, counts, date_range
+    
     # ==================== RE-ENTRY OPERATIONS (NEW in v2.0) ====================
     
     def add_reentry_site(self, site_data: Dict) -> int:
@@ -1024,8 +1334,8 @@ class LaunchDatabase:
         cursor.execute('''
             INSERT INTO reentry_sites (
                 location, drop_zone, latitude, longitude,
-                country, zone_type, external_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                country, zone_type, external_id, turnaround_days
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             site_data['location'],
             site_data['drop_zone'],
@@ -1033,7 +1343,8 @@ class LaunchDatabase:
             site_data.get('longitude'),
             site_data.get('country'),
             site_data.get('zone_type'),
-            site_data.get('external_id')
+            site_data.get('external_id'),
+            site_data.get('turnaround_days', 7)
         ))
         self.conn.commit()
         return cursor.lastrowid
@@ -1078,6 +1389,105 @@ class LaunchDatabase:
             ORDER BY re.reentry_date, re.reentry_time
         ''', (str(year), f'{month:02d}'))
         
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def get_all_reentry_sites(self) -> List[Dict]:
+        """Get all re-entry sites from reentry_sites table"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT reentry_site_id as site_id, 
+                   location, 
+                   drop_zone as launch_pad,
+                   drop_zone,
+                   latitude, 
+                   longitude, 
+                   country,
+                   zone_type,
+                   turnaround_days,
+                   external_id
+            FROM reentry_sites
+            ORDER BY country, location, drop_zone
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def update_reentry_site(self, site_id: int, site_data: Dict):
+        """Update an existing re-entry site"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE reentry_sites SET
+                location = ?,
+                drop_zone = ?,
+                latitude = ?,
+                longitude = ?,
+                country = ?,
+                zone_type = ?,
+                turnaround_days = ?
+            WHERE reentry_site_id = ?
+        ''', (
+            site_data['location'],
+            site_data['drop_zone'],
+            site_data.get('latitude'),
+            site_data.get('longitude'),
+            site_data.get('country'),
+            site_data.get('zone_type'),
+            site_data.get('turnaround_days', 7),
+            site_id
+        ))
+        self.conn.commit()
+    
+    def delete_reentry_site(self, site_id: int):
+        """Delete a re-entry site"""
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM reentry_sites WHERE reentry_site_id = ?', (site_id,))
+        self.conn.commit()
+    
+    def update_reentry(self, reentry_id: int, reentry_data: Dict):
+        """Update an existing re-entry record"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE reentries SET
+                launch_id = ?,
+                reentry_date = ?,
+                reentry_time = ?,
+                reentry_site_id = ?,
+                vehicle_component = ?,
+                reentry_type = ?,
+                status_id = ?,
+                remarks = ?
+            WHERE reentry_id = ?
+        ''', (
+            reentry_data.get('launch_id'),
+            reentry_data['reentry_date'],
+            reentry_data.get('reentry_time'),
+            reentry_data.get('reentry_site_id'),
+            reentry_data.get('vehicle_component'),
+            reentry_data.get('reentry_type'),
+            reentry_data.get('status_id'),
+            reentry_data.get('remarks'),
+            reentry_id
+        ))
+        self.conn.commit()
+    
+    def delete_reentry(self, reentry_id: int):
+        """Delete a re-entry record"""
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM reentries WHERE reentry_id = ?', (reentry_id,))
+        self.conn.commit()
+    
+    def get_all_reentries(self) -> List[Dict]:
+        """Get all re-entries"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT re.*, 
+                   rs.location, rs.drop_zone,
+                   l.mission_name, l.payload_name,
+                   st.status_name, st.status_color
+            FROM reentries re
+            LEFT JOIN reentry_sites rs ON re.reentry_site_id = rs.reentry_site_id
+            LEFT JOIN launches l ON re.launch_id = l.launch_id
+            LEFT JOIN launch_status st ON re.status_id = st.status_id
+            ORDER BY re.reentry_date DESC, re.reentry_time DESC
+        ''')
         return [dict(row) for row in cursor.fetchall()]
     
     # ==================== SYNC OPERATIONS (NEW in v2.0) ====================

@@ -45,7 +45,10 @@ shockwave_v2/
 │   ├── timeline_view.py            # Launch timeline Gantt chart
 │   ├── timeline_view_reentry.py    # Re-entry timeline Gantt chart
 │   └── enhanced_list_view.py       # Launch list with filters
-│
+│   └── statistics_view.py           # Launch statistics and charts
+│   └── rocket_view.py               # Rocket list 
+│   └── reentry_vehicles_view.py      # Reentry Vehicles list
+│ 
 ├── data/                            # Data Access Layer
 │   ├── __init__.py
 │   ├── database.py                 # SQLite database interface
