@@ -103,9 +103,9 @@ class SpaceDevsAPI:
         return all_launches
     
     def fetch_upcoming_launches(self, limit: int = 100) -> List[Dict]:
-        """Fetch upcoming launches from API"""
+        """Fetch upcoming launches from API - 1 year in the future"""
         now = datetime.utcnow()
-        end_date = now + timedelta(days=90)  # Next 90 days
+        end_date = now + timedelta(days=365)  # Next 1 year
         
         params = {
             "net__gte": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -118,9 +118,9 @@ class SpaceDevsAPI:
         return self.fetch_launches(params)
     
     def fetch_previous_launches(self, limit: int = 100) -> List[Dict]:
-        """Fetch previous launches from API"""
+        """Fetch previous launches from API - 3 years in the past"""
         now = datetime.utcnow()
-        start_date = now - timedelta(days=30)  # Last 30 days
+        start_date = now - timedelta(days=1095)  # Last 3 years (365 * 3)
         
         params = {
             "net__gte": start_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -539,6 +539,83 @@ class SpaceDevsAPI:
             'total_processed': len(api_launches)
         }
     
+    def sync_full_range(self) -> Dict:
+        """
+        Sync full date range: 3 years past + 1 year future
+        This is the comprehensive sync that gets all relevant launches
+        """
+        print("=" * 60)
+        print("FULL RANGE SYNC: 3 years past + 1 year future")
+        print("=" * 60)
+        
+        now = datetime.utcnow()
+        start_date = now - timedelta(days=1095)  # 3 years ago
+        end_date = now + timedelta(days=365)     # 1 year ahead
+        
+        # Break into 30-day chunks to avoid API limitations
+        all_results = {
+            'added': 0,
+            'updated': 0,
+            'skipped': 0,
+            'errors': [],
+            'total_processed': 0
+        }
+        
+        current_start = start_date
+        chunk_num = 1
+        
+        while current_start < end_date:
+            # Calculate chunk end (30 days or remaining time)
+            chunk_end = min(current_start + timedelta(days=30), end_date)
+            
+            start_str = current_start.strftime('%Y-%m-%d')
+            end_str = chunk_end.strftime('%Y-%m-%d')
+            
+            print(f"\n📅 Chunk {chunk_num}: {start_str} to {end_str}")
+            
+            try:
+                # Sync this chunk
+                chunk_result = self.sync_date_range(start_str, end_str)
+                
+                # Aggregate results
+                all_results['added'] += chunk_result['added']
+                all_results['updated'] += chunk_result['updated']
+                all_results['skipped'] += chunk_result['skipped']
+                all_results['errors'].extend(chunk_result['errors'])
+                all_results['total_processed'] += chunk_result['total_processed']
+                
+            except Exception as e:
+                error_msg = f"Chunk {chunk_num} failed: {e}"
+                all_results['errors'].append(error_msg)
+                print(f"❌ {error_msg}")
+            
+            # Move to next chunk
+            current_start = chunk_end + timedelta(days=1)
+            chunk_num += 1
+            
+            # Small delay between chunks to be nice to the API
+            time.sleep(1)
+        
+        print("\n" + "=" * 60)
+        print("FULL RANGE SYNC COMPLETE")
+        print("=" * 60)
+        print(f"Total Added:     {all_results['added']}")
+        print(f"Total Updated:   {all_results['updated']}")
+        print(f"Total Skipped:   {all_results['skipped']}")
+        print(f"Total Errors:    {len(all_results['errors'])}")
+        print(f"Total Processed: {all_results['total_processed']}")
+        
+        # Log the full sync
+        status = 'SUCCESS' if not all_results['errors'] else 'PARTIAL'
+        error_msg = '; '.join(all_results['errors'][:10]) if all_results['errors'] else None
+        self.db.log_sync('SPACE_DEVS_FULL_RANGE', 
+                        all_results['added'], 
+                        all_results['updated'], 
+                        status, 
+                        error_msg)
+        
+        return all_results
+    
     def sync_rocket_details(self) -> dict:
         """
         Update existing rockets with details from Space Devs
@@ -588,8 +665,8 @@ class SpaceDevsAPI:
                     'country': config.get('manufacturer', {}).get('country_code', '') if config.get('manufacturer') else '',
                 }
                 
-                # Update rocket
-                self.db.update_rocket(rocket_id, rocket_data)
+                # Update rocket - PRESERVE MANUAL DATA (alternative_name, boosters, payload_sso, payload_tli)
+                self.db.update_rocket_preserve_manual(rocket_id, rocket_data)
                 updated_count += 1
                 print("✓")
                 
@@ -605,6 +682,140 @@ class SpaceDevsAPI:
         
         return {
             'updated': updated_count,
+            'errors': errors
+        }
+    
+    def fetch_all_rockets(self) -> List[Dict]:
+        """
+        Fetch all launcher configurations from Space Devs API
+        Returns: List of rocket configuration dictionaries
+        """
+        all_rockets = []
+        url = "https://ll.thespacedevs.com/2.3.0/config/launcher/"
+        page = 1
+        
+        print("🚀 Fetching all rockets from Space Devs API...")
+        
+        while url:
+            try:
+                print(f"   Page {page}...", end=' ')
+                
+                if page > 1:
+                    time.sleep(self.RATE_LIMIT_DELAY)
+                
+                resp = self.session.get(url, timeout=30)
+                
+                if resp.status_code == 429:
+                    print("⚠️  Rate limited! Waiting 60 seconds...")
+                    time.sleep(60)
+                    resp = self.session.get(url, timeout=30)
+                
+                if resp.status_code != 200:
+                    print(f"❌ Error: HTTP {resp.status_code}")
+                    break
+                
+                data = resp.json()
+                results = data.get("results", [])
+                all_rockets.extend(results)
+                
+                print(f"✓ ({len(results)} rockets)")
+                
+                url = data.get("next")
+                page += 1
+                
+            except Exception as e:
+                print(f"❌ Error fetching page {page}: {e}")
+                break
+        
+        print(f"✅ Fetched {len(all_rockets)} total rockets")
+        return all_rockets
+    
+    def sync_all_rockets(self) -> dict:
+        """
+        Fetch all rockets from SpaceDevs and add/update them in the database
+        This is a comprehensive sync of the entire rocket catalog
+        Returns: {'added': count, 'updated': count, 'skipped': count, 'errors': [...]}
+        """
+        print("=" * 60)
+        print("SYNCING ALL ROCKETS FROM SPACE DEVS")
+        print("=" * 60)
+        print()
+        
+        # Fetch all rockets from API
+        api_rockets = self.fetch_all_rockets()
+        
+        if not api_rockets:
+            print("❌ No rockets fetched from API")
+            return {'added': 0, 'updated': 0, 'skipped': 0, 'errors': ['No rockets fetched']}
+        
+        # Get existing rockets from database
+        existing_rockets = self.db.get_all_rockets()
+        existing_by_external_id = {r.get('external_id'): r for r in existing_rockets if r.get('external_id')}
+        
+        added = 0
+        updated = 0
+        skipped = 0
+        errors = []
+        
+        print(f"\n📊 Processing {len(api_rockets)} rockets...")
+        print()
+        
+        for api_rocket in api_rockets:
+            try:
+                external_id = str(api_rocket.get('id', ''))
+                
+                if not external_id:
+                    skipped += 1
+                    continue
+                
+                # Prepare rocket data
+                rocket_data = {
+                    'name': api_rocket.get('full_name') or api_rocket.get('name', 'Unknown'),
+                    'family': api_rocket.get('family', ''),
+                    'variant': api_rocket.get('variant', ''),
+                    'manufacturer': api_rocket.get('manufacturer', {}).get('name', '') if api_rocket.get('manufacturer') else '',
+                    'country': api_rocket.get('manufacturer', {}).get('country_code', '') if api_rocket.get('manufacturer') else '',
+                    'external_id': external_id,
+                    'external_source': 'SPACE_DEVS'
+                }
+                
+                # Check if rocket already exists
+                if external_id in existing_by_external_id:
+                    # Update existing rocket - PRESERVE MANUAL DATA
+                    existing = existing_by_external_id[external_id]
+                    self.db.update_rocket_preserve_manual(existing['rocket_id'], rocket_data)
+                    updated += 1
+                    print(f"   ↻ Updated: {rocket_data['name']}")
+                else:
+                    # Add new rocket
+                    self.db.add_rocket(rocket_data)
+                    added += 1
+                    print(f"   + Added: {rocket_data['name']}")
+                
+            except Exception as e:
+                error_msg = f"Error processing rocket: {e}"
+                errors.append(error_msg)
+                print(f"   ❌ Error: {e}")
+                skipped += 1
+        
+        print()
+        print("=" * 60)
+        print("ROCKET SYNC COMPLETE")
+        print("=" * 60)
+        print(f"Added:   {added}")
+        print(f"Updated: {updated}")
+        print(f"Skipped: {skipped}")
+        print(f"Errors:  {len(errors)}")
+        
+        # Log sync
+        status = 'SUCCESS' if not errors else 'PARTIAL'
+        error_msg = '; '.join(errors[:10]) if errors else None
+        self.db.log_sync('SPACE_DEVS_ALL_ROCKETS', added, updated, status, error_msg)
+        
+        return {
+            'added': added,
+            'updated': updated,
+            'skipped': skipped,
             'errors': errors
         }
 
@@ -628,6 +839,9 @@ if __name__ == '__main__':
         elif sys.argv[1] == 'previous':
             limit = int(sys.argv[2]) if len(sys.argv) > 2 else 50
             result = api.sync_previous_launches(limit=limit)
+        elif sys.argv[1] == 'full':
+            # Sync full 4-year range (3 years past + 1 year future)
+            result = api.sync_full_range()
         elif sys.argv[1] == 'range':
             if len(sys.argv) < 4:
                 print("Usage: python space_devs.py range START_DATE END_DATE")
@@ -636,8 +850,21 @@ if __name__ == '__main__':
             start = sys.argv[2]
             end = sys.argv[3]
             result = api.sync_date_range(start, end)
+        elif sys.argv[1] == 'rockets':
+            # NEW: Sync all rockets from SpaceDevs
+            result = api.sync_all_rockets()
+        elif sys.argv[1] == 'update-rockets':
+            # NEW: Update existing rockets only
+            result = api.sync_rocket_details()
         else:
-            print("Unknown command. Use: upcoming, previous, or range")
+            print("Unknown command.")
+            print("Available commands:")
+            print("  upcoming [limit]  - Sync upcoming launches (1 year ahead)")
+            print("  previous [limit]  - Sync previous launches (3 years back)")
+            print("  full              - Sync full range (3 years back + 1 year ahead)")
+            print("  range START END   - Sync specific date range (YYYY-MM-DD)")
+            print("  rockets           - Sync ALL rockets from SpaceDevs (add new + update existing)")
+            print("  update-rockets    - Update existing rockets only (no new additions)")
             sys.exit(1)
     else:
         # Default: sync upcoming
@@ -647,13 +874,23 @@ if __name__ == '__main__':
     print("=" * 60)
     print("SYNC COMPLETE")
     print("=" * 60)
-    print(f"Added:      {result['added']}")
-    print(f"Updated:    {result['updated']}")
-    print(f"Skipped:    {result['skipped']}")
-    print(f"Errors:     {len(result['errors'])}")
-    print(f"Processed:  {result['total_processed']}")
     
-    if result['errors']:
+    # Handle different result formats
+    if 'total_processed' in result:
+        # Launch sync results
+        print(f"Added:      {result['added']}")
+        print(f"Updated:    {result['updated']}")
+        print(f"Skipped:    {result['skipped']}")
+        print(f"Errors:     {len(result['errors'])}")
+        print(f"Processed:  {result['total_processed']}")
+    else:
+        # Rocket sync results (or other formats)
+        print(f"Added:      {result.get('added', 0)}")
+        print(f"Updated:    {result.get('updated', 0)}")
+        print(f"Skipped:    {result.get('skipped', 0)}")
+        print(f"Errors:     {len(result.get('errors', []))}")
+    
+    if result.get('errors'):
         print("\nErrors:")
         for error in result['errors'][:5]:
             print(f"  - {error}")
