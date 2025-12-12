@@ -6,7 +6,8 @@ Author: Remix Astronautics
 Date: December 2025
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
-                              QFormLayout, QLabel, QTextEdit)
+                              QFormLayout, QLabel, QTextEdit, QTableWidget,
+                              QTableWidgetItem, QHeaderView)
 from PyQt6.QtCore import Qt
 from datetime import datetime
 
@@ -23,23 +24,46 @@ class StatisticsView(QWidget):
         """Initialize the user interface"""
         layout = QVBoxLayout()
         
-        stats = self.db.get_statistics()
+        # 5-Year Launch Overview (at the top)
+        yearly_stats = self.db.get_yearly_statistics(5)
         
-        # Launch Overview
-        overview_group = QGroupBox("Launch Overview")
-        overview_layout = QFormLayout()
-        overview_layout.addRow("Total Launches:", QLabel(str(stats['total_launches'])))
-        overview_layout.addRow("Successful:", QLabel(str(stats['successful'])))
-        overview_layout.addRow("Failed:", QLabel(str(stats['failed'])))
-        overview_layout.addRow("Pending:", QLabel(str(stats['pending'])))
+        # Reverse the list so 2025 is at the top
+        yearly_stats.reverse()
         
-        success_rate = 0
-        if stats['successful'] + stats['failed'] > 0:
-            success_rate = (stats['successful'] / (stats['successful'] + stats['failed'])) * 100
-        overview_layout.addRow("Success Rate:", QLabel(f"{success_rate:.1f}%"))
+        overview_group = QGroupBox("Launch Statistics - Past 5 Years")
+        overview_layout = QVBoxLayout()
         
+        # Create table for yearly statistics
+        year_table = QTableWidget()
+        year_table.setRowCount(len(yearly_stats))
+        year_table.setColumnCount(6)
+        year_table.setHorizontalHeaderLabels([
+            'Year', 'Total', 'Successful', 'Failed', 'Pending', 'Success Rate'
+        ])
+        year_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        year_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        year_table.setMaximumHeight(200)
+        
+        for row, year_data in enumerate(yearly_stats):
+            # Center-aligned items
+            def create_centered_item(text):
+                item = QTableWidgetItem(str(text))
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                return item
+            
+            year_table.setItem(row, 0, create_centered_item(year_data['year']))
+            year_table.setItem(row, 1, create_centered_item(year_data['total']))
+            year_table.setItem(row, 2, create_centered_item(year_data['successful']))
+            year_table.setItem(row, 3, create_centered_item(year_data['failed']))
+            year_table.setItem(row, 4, create_centered_item(year_data['pending']))
+            year_table.setItem(row, 5, create_centered_item(f"{year_data['success_rate']:.1f}%"))
+        
+        overview_layout.addWidget(year_table)
         overview_group.setLayout(overview_layout)
         layout.addWidget(overview_group)
+        
+        # Get overall statistics for other sections
+        stats = self.db.get_statistics()
         
         # Top 10 Rockets
         rockets_group = QGroupBox("Top 10 Rockets")
@@ -83,11 +107,17 @@ class StatisticsView(QWidget):
     
     def refresh(self):
         """Refresh the statistics display"""
-        # Clear the current layout
-        while self.layout().count():
-            child = self.layout().takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+        # Delete the old layout properly
+        old_layout = self.layout()
+        if old_layout:
+            # Remove all widgets from layout
+            while old_layout.count():
+                child = old_layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+            
+            # Delete the layout itself
+            QWidget().setLayout(old_layout)
         
         # Rebuild the UI with fresh data
         self.init_ui()
