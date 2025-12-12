@@ -1,15 +1,19 @@
 """
 SHOCKWAVE PLANNER v2.0 - Statistics View
-Launch statistics and analytics overview
+Launch statistics and analytics overview with interactive charts
 
 Author: Remix Astronautics
 Date: December 2025
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
-                              QFormLayout, QLabel, QTextEdit, QTableWidget,
-                              QTableWidgetItem, QHeaderView)
+                              QFormLayout, QLabel, QTableWidget,
+                              QTableWidgetItem, QHeaderView, QComboBox,
+                              QCheckBox, QSpinBox, QPushButton)
 from PyQt6.QtCore import Qt
-from datetime import datetime
+from datetime import datetime, timedelta
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 
 
 class StatisticsView(QWidget):
@@ -62,48 +66,299 @@ class StatisticsView(QWidget):
         overview_group.setLayout(overview_layout)
         layout.addWidget(overview_group)
         
-        # Get overall statistics for other sections
-        stats = self.db.get_statistics()
+        # Interactive Chart Section
+        chart_group = QGroupBox("Interactive Launch Analysis")
+        chart_layout = QVBoxLayout()
         
-        # Top 10 Rockets
-        rockets_group = QGroupBox("Top 10 Rockets")
-        rockets_layout = QVBoxLayout()
-        rockets_text = QTextEdit()
-        rockets_text.setReadOnly(True)
-        rocket_stats = "\n".join([f"{r['name']}: {r['count']} launches" 
-                                 for r in stats['by_rocket']])
-        rockets_text.setPlainText(rocket_stats if rocket_stats else "No data")
-        rockets_layout.addWidget(rockets_text)
-        rockets_group.setLayout(rockets_layout)
-        layout.addWidget(rockets_group)
+        # Controls layout
+        controls_layout = QHBoxLayout()
         
-        # Launches by Site
-        sites_group = QGroupBox("Launches by Site")
-        sites_layout = QVBoxLayout()
-        sites_text = QTextEdit()
-        sites_text.setReadOnly(True)
-        site_stats = "\n".join([f"{s['location']}: {s['count']} launches" 
-                               for s in stats['by_site']])
-        sites_text.setPlainText(site_stats if site_stats else "No data")
-        sites_layout.addWidget(sites_text)
-        sites_group.setLayout(sites_layout)
-        layout.addWidget(sites_group)
+        # X-Axis Controls
+        x_axis_layout = QVBoxLayout()
+        x_axis_label = QLabel("Time Period:")
+        x_axis_label.setStyleSheet("font-weight: bold;")
+        x_axis_layout.addWidget(x_axis_label)
         
-        # Space Devs Sync Status
-        last_sync = self.db.get_last_sync('SPACE_DEVS_UPCOMING')
-        if last_sync:
-            sync_group = QGroupBox("Last Space Devs Sync")
-            sync_layout = QFormLayout()
-            sync_time = datetime.fromisoformat(last_sync['sync_time']).strftime('%Y-%m-%d %H:%M:%S')
-            sync_layout.addRow("Time:", QLabel(sync_time))
-            sync_layout.addRow("Added:", QLabel(str(last_sync['records_added'])))
-            sync_layout.addRow("Updated:", QLabel(str(last_sync['records_updated'])))
-            sync_layout.addRow("Status:", QLabel(last_sync['status']))
-            sync_group.setLayout(sync_layout)
-            layout.addWidget(sync_group)
+        self.time_period_combo = QComboBox()
+        self.time_period_combo.addItems([
+            "1 Month (days)",
+            "3 Months (days)", 
+            "12 Months (calendar)"
+        ])
+        self.time_period_combo.setCurrentIndex(2)  # Default to 12 months
+        self.time_period_combo.currentIndexChanged.connect(self.on_time_period_changed)
+        x_axis_layout.addWidget(self.time_period_combo)
+        
+        # Custom months input (for 1 and 3 month options)
+        months_input_layout = QHBoxLayout()
+        self.months_label = QLabel("Select Month:")
+        months_input_layout.addWidget(self.months_label)
+        self.month_selector = QComboBox()
+        # Populate with months
+        month_names = ['January', 'February', 'March', 'April', 'May', 'June',
+                      'July', 'August', 'September', 'October', 'November', 'December']
+        current_month = datetime.now().month
+        for i, month in enumerate(month_names, 1):
+            self.month_selector.addItem(month, i)
+        self.month_selector.setCurrentIndex(current_month - 1)  # Set to current month
+        self.month_selector.currentIndexChanged.connect(self.update_chart)
+        months_input_layout.addWidget(self.month_selector)
+        months_input_layout.addStretch()
+        x_axis_layout.addLayout(months_input_layout)
+        
+        # Month range label (shows the actual date range being plotted)
+        self.month_range_label = QLabel("")
+        self.month_range_label.setStyleSheet("font-style: italic; color: #666;")
+        x_axis_layout.addWidget(self.month_range_label)
+        
+        # Hide months input by default (shown for 1 and 3 month options)
+        self.month_selector.setVisible(False)
+        self.months_label.setVisible(False)
+        self.month_range_label.setVisible(False)
+        
+        x_axis_layout.addStretch()
+        controls_layout.addLayout(x_axis_layout)
+        
+        # Y-Axis Controls
+        y_axis_layout = QVBoxLayout()
+        y_axis_label = QLabel("Filter By:")
+        y_axis_label.setStyleSheet("font-weight: bold;")
+        y_axis_layout.addWidget(y_axis_label)
+        
+        # Country selector
+        country_layout = QHBoxLayout()
+        country_layout.addWidget(QLabel("Country:"))
+        self.country_combo = QComboBox()
+        self.country_combo.currentIndexChanged.connect(self.on_country_changed)
+        country_layout.addWidget(self.country_combo)
+        y_axis_layout.addLayout(country_layout)
+        
+        # Filter type selector (Sites or Rockets)
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("View by:"))
+        self.filter_type_combo = QComboBox()
+        self.filter_type_combo.addItems(["Launch Sites", "Rockets"])
+        self.filter_type_combo.currentIndexChanged.connect(self.on_filter_type_changed)
+        filter_layout.addWidget(self.filter_type_combo)
+        y_axis_layout.addLayout(filter_layout)
+        
+        # Specific site/rocket selector
+        entity_layout = QHBoxLayout()
+        self.entity_label = QLabel("Launch Site:")
+        entity_layout.addWidget(self.entity_label)
+        self.entity_combo = QComboBox()
+        self.entity_combo.currentIndexChanged.connect(self.update_chart)
+        entity_layout.addWidget(self.entity_combo)
+        y_axis_layout.addLayout(entity_layout)
+        
+        y_axis_layout.addStretch()
+        controls_layout.addLayout(y_axis_layout)
+        
+        # Year Comparison Controls
+        comparison_layout = QVBoxLayout()
+        comparison_label = QLabel("Compare with:")
+        comparison_label.setStyleSheet("font-weight: bold;")
+        comparison_layout.addWidget(comparison_label)
+        
+        self.prev_year_1_check = QCheckBox("Include previous year")
+        self.prev_year_1_check.stateChanged.connect(self.update_chart)
+        comparison_layout.addWidget(self.prev_year_1_check)
+        
+        self.prev_year_2_check = QCheckBox("Include past 2 years")
+        self.prev_year_2_check.stateChanged.connect(self.update_chart)
+        comparison_layout.addWidget(self.prev_year_2_check)
+        
+        self.prev_year_3_check = QCheckBox("Include past 3 years")
+        self.prev_year_3_check.stateChanged.connect(self.update_chart)
+        comparison_layout.addWidget(self.prev_year_3_check)
+        
+        comparison_layout.addStretch()
+        controls_layout.addLayout(comparison_layout)
+        
+        # Update button
+        update_button_layout = QVBoxLayout()
+        update_button_layout.addStretch()
+        self.update_button = QPushButton("Update Chart")
+        self.update_button.clicked.connect(self.update_chart)
+        update_button_layout.addWidget(self.update_button)
+        update_button_layout.addStretch()
+        controls_layout.addLayout(update_button_layout)
+        
+        chart_layout.addLayout(controls_layout)
+        
+        # Matplotlib chart
+        self.figure = Figure(figsize=(10, 6))
+        self.canvas = FigureCanvas(self.figure)
+        chart_layout.addWidget(self.canvas)
+        
+        chart_group.setLayout(chart_layout)
+        layout.addWidget(chart_group)
         
         layout.addStretch()
         self.setLayout(layout)
+        
+        # Initialize data
+        self.populate_countries()
+        self.populate_entities()
+        self.update_chart()
+    
+    def populate_countries(self):
+        """Populate the country dropdown"""
+        countries = self.db.get_countries()
+        self.country_combo.clear()
+        self.country_combo.addItem("Global (All Countries)")
+        for country in countries:
+            if country:  # Only add non-empty country names
+                self.country_combo.addItem(country)
+    
+    def populate_entities(self):
+        """Populate launch sites or rockets based on selected country and filter type"""
+        self.entity_combo.clear()
+        
+        country = self.country_combo.currentText()
+        if country == "Global (All Countries)":
+            country = None
+        
+        filter_type = self.filter_type_combo.currentText()
+        
+        if filter_type == "Launch Sites":
+            entities = self.db.get_launch_sites_by_country(country)
+            self.entity_combo.addItem("All Sites")
+            for entity in entities:
+                self.entity_combo.addItem(entity)
+        else:  # Rockets
+            entities = self.db.get_rockets_by_country(country)
+            self.entity_combo.addItem("All Rockets")
+            for entity in entities:
+                self.entity_combo.addItem(entity)
+    
+    def on_country_changed(self):
+        """Handle country selection change"""
+        self.populate_entities()
+        self.update_chart()
+    
+    def on_filter_type_changed(self):
+        """Handle filter type change (Sites/Rockets)"""
+        filter_type = self.filter_type_combo.currentText()
+        if filter_type == "Launch Sites":
+            self.entity_label.setText("Launch Site:")
+        else:
+            self.entity_label.setText("Rocket:")
+        self.populate_entities()
+        self.update_chart()
+    
+    def on_time_period_changed(self):
+        """Handle time period selection change"""
+        time_period = self.time_period_combo.currentText()
+        
+        # Show/hide months input based on selection
+        if time_period in ["1 Month (days)", "3 Months (days)"]:
+            self.month_selector.setVisible(True)
+            self.months_label.setVisible(True)
+            self.month_range_label.setVisible(True)
+        else:
+            self.month_selector.setVisible(False)
+            self.months_label.setVisible(False)
+            self.month_range_label.setVisible(False)
+        
+        self.update_chart()
+    
+    def update_chart(self):
+        """Update the chart with current selections"""
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        
+        # Get current selections
+        time_period = self.time_period_combo.currentText()
+        country = self.country_combo.currentText()
+        if country == "Global (All Countries)":
+            country = None
+        
+        filter_type = self.filter_type_combo.currentText()
+        entity = self.entity_combo.currentText()
+        if entity.startswith("All "):
+            entity = None
+        
+        # Get comparison years
+        current_year = datetime.now().year
+        years_to_plot = [current_year]
+        
+        if self.prev_year_1_check.isChecked():
+            years_to_plot.append(current_year - 1)
+        if self.prev_year_2_check.isChecked():
+            years_to_plot.append(current_year - 2)
+        if self.prev_year_3_check.isChecked():
+            years_to_plot.append(current_year - 3)
+        
+        years_to_plot.sort()
+        
+        # Determine time granularity
+        if time_period == "1 Month (days)" or time_period == "3 Months (days)":
+            selected_month = self.month_selector.currentData()  # Get the month number (1-12)
+            num_months = 1 if time_period == "1 Month (days)" else 3
+            is_daily = True
+        else:  # 12 Months (calendar)
+            selected_month = None
+            num_months = 12
+            is_daily = False
+        
+        # Plot data for each year
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+        
+        for idx, year in enumerate(years_to_plot):
+            if is_daily:
+                # Daily data - pass the selected month
+                dates, counts, date_range = self.db.get_launch_data_daily_by_month(
+                    year, selected_month, num_months, country, 
+                    entity if filter_type == "Launch Sites" else None,
+                    entity if filter_type == "Rockets" else None
+                )
+                
+                # Plot with fewer labels on X-axis (show only day numbers)
+                ax.plot(range(len(dates)), counts, marker='o', markersize=3, 
+                       label=str(year), color=colors[idx % len(colors)])
+                
+                # Set X-axis to show only day numbers, reduced frequency
+                num_ticks = min(len(dates), 15)  # Show max 15 labels
+                tick_indices = [i * len(dates) // num_ticks for i in range(num_ticks)]
+                ax.set_xticks(tick_indices)
+                ax.set_xticklabels([dates[i] for i in tick_indices], rotation=0, fontsize=9)
+                
+                # Update the month range label
+                if idx == 0:  # Only update once
+                    self.month_range_label.setText(f"({date_range})")
+            else:
+                # Monthly data
+                months, counts = self.db.get_launch_data_monthly(
+                    year, country,
+                    entity if filter_type == "Launch Sites" else None,
+                    entity if filter_type == "Rockets" else None
+                )
+                month_labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                ax.plot(months, counts, marker='o', markersize=5,
+                       label=str(year), color=colors[idx % len(colors)], linewidth=2)
+                ax.set_xticks(range(1, 13))
+                ax.set_xticklabels(month_labels)
+        
+        # Chart styling
+        title = "Launch Frequency"
+        if country:
+            title += f" - {country}"
+        if entity:
+            title += f" - {entity}"
+        
+        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.set_xlabel('Time Period', fontsize=11)
+        ax.set_ylabel('Number of Launches', fontsize=11)
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+        
+        # Set integer y-axis
+        ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+        
+        self.figure.tight_layout()
+        self.canvas.draw()
     
     def refresh(self):
         """Refresh the statistics display"""
