@@ -302,8 +302,22 @@ class StatisticsView(QWidget):
             num_months = 12
             is_daily = False
         
-        # Plot data for each year
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+        # Custom year colors - darkest to lightest (oldest to newest)
+        # Map years to colors based on age relative to current year
+        current_year = datetime.now().year
+        year_colors = {}
+        for year in years_to_plot:
+            years_ago = current_year - year
+            if years_ago == 0:
+                year_colors[year] = '#ff3838'  # Current year: RED (bright red like map)
+            elif years_ago == 1:
+                year_colors[year] = '#ff9500'  # Previous year: ORANGE (bright orange like map)
+            elif years_ago == 2:
+                year_colors[year] = '#ffb347'  # 2 years ago: LIGHTER ORANGE
+            elif years_ago == 3:
+                year_colors[year] = '#ffdd00'  # 3 years ago: YELLOW (bright yellow like map)
+            else:
+                year_colors[year] = '#808080'  # Older: Gray
         
         for idx, year in enumerate(years_to_plot):
             if is_daily:
@@ -316,7 +330,7 @@ class StatisticsView(QWidget):
                 
                 # Plot with fewer labels on X-axis (show only day numbers)
                 ax.plot(range(len(dates)), counts, marker='o', markersize=3, 
-                       label=str(year), color=colors[idx % len(colors)])
+                       label=str(year), color=year_colors[year], linewidth=2)
                 
                 # Set X-axis to show only day numbers, reduced frequency
                 num_ticks = min(len(dates), 15)  # Show max 15 labels
@@ -337,22 +351,36 @@ class StatisticsView(QWidget):
                 month_labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
                 ax.plot(months, counts, marker='o', markersize=5,
-                       label=str(year), color=colors[idx % len(colors)], linewidth=2)
+                       label=str(year), color=year_colors[year], linewidth=2)
                 ax.set_xticks(range(1, 13))
                 ax.set_xticklabels(month_labels)
         
-        # Chart styling
-        title = "Launch Frequency"
-        if country:
-            title += f" - {country}"
-        if entity:
-            title += f" - {entity}"
+        # Dark theme chart styling
+        # Set dark background colors
+        self.figure.patch.set_facecolor('#0f0f1e')  # Dark background (like map)
+        ax.set_facecolor('#1a1a2e')  # Dark plot area (like map ocean)
         
-        ax.set_title(title, fontsize=14, fontweight='bold')
-        ax.set_xlabel('Time Period', fontsize=11)
-        ax.set_ylabel('Number of Launches', fontsize=11)
-        ax.legend(loc='best')
-        ax.grid(True, alpha=0.3)
+        # No title - clean look (like map)
+        
+        # Axis labels in purple (matching tick colors and grid)
+        ax.set_xlabel('Time Period', fontsize=11, color='#533483')
+        ax.set_ylabel('Number of Launches', fontsize=11, color='#533483')
+        
+        # Legend with dark theme
+        legend = ax.legend(loc='best', facecolor='#1a1a2e', edgecolor='#533483', 
+                          framealpha=0.9, labelcolor='white')
+        legend.get_frame().set_linewidth(1.5)
+        
+        # Grid in subtle purple (like map)
+        ax.grid(True, alpha=0.3, color='#533483', linewidth=0.5)
+        
+        # Tick colors in purple (like map coordinates)
+        ax.tick_params(colors='#533483', which='both')
+        
+        # Spine colors in purple
+        for spine in ax.spines.values():
+            spine.set_edgecolor('#533483')
+            spine.set_linewidth(1)
         
         # Set integer y-axis
         ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
