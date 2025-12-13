@@ -214,7 +214,13 @@ class EnhancedListView(QWidget):
             self.launch_table.setItem(row, 7, create_centered_item(launch.get('orbit_type', '')))
             
             # NOTAM
-            notam_data = self.db.conn.cursor().execute("""SELECT group_concat(ln.serial, ', ') AS tooltip FROM launch_notam AS ln WHERE ln.launch_id == ?;""", (str(launch['launch_id']),))
+            notam_data = self.db.conn.cursor().execute("""
+                                                        SELECT group_concat(ln.serial, ', ') AS tooltip 
+                                                        FROM launch_notam AS ln 
+                                                        WHERE ln.launch_id == ?;
+                                                       """, 
+                                                       (str(launch['launch_id']),)
+                                                       )
             notam_data = [dict(row) for row in notam_data.fetchall()]
             notam_tooltip = notam_data[0]['tooltip']
             
