@@ -214,9 +214,24 @@ class EnhancedListView(QWidget):
             self.launch_table.setItem(row, 7, create_centered_item(launch.get('orbit_type', '')))
             
             # NOTAM
-            notam_item = create_centered_item(launch.get('notam_reference', ''))
-            if launch.get('notam_reference'):
+            notam_data = self.db.conn.cursor().execute("""
+                                                        SELECT group_concat(ln.serial, ', ') AS tooltip 
+                                                        FROM launch_notam AS ln 
+                                                        WHERE ln.launch_id == ?;
+                                                       """, 
+                                                       (str(launch['launch_id']),)
+                                                       )
+            notam_data = [dict(row) for row in notam_data.fetchall()]
+            notam_tooltip = notam_data[0]['tooltip']
+            
+            notam_item = create_centered_item(notam_tooltip)
+            if notam_tooltip:
                 notam_item.setBackground(QColor(255, 255, 200))  # Light yellow highlight
+                notam_item.setText("✔")
+                
+                notam_item.setToolTip(notam_tooltip)
+            else:
+                notam_item.setText("X")
             self.launch_table.setItem(row, 8, notam_item)
             
             # Status

@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 
-DEFAULT_DB_PATH = 'shockwave_planner.db'
+DEFAULT_DB_PATH = r'./shockwave_planner_v2/shockwave_planner.db'
 
 class LaunchDatabase:
     """Database operations for SHOCKWAVE PLANNER"""
@@ -197,7 +197,25 @@ class LaunchDatabase:
                 error_message TEXT
             )
         ''')
+
+        # NOTAM table (NEW in v2.0)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS notam (
+                serial TEXT PRIMARY KEY
+            )
+        ''')
         
+        # NOTAM - launches m-n relation table (NEW in v2.0)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS launch_notam (
+                launch_id INTEGER NOT NULL,
+                serial TEXT NOT NULL,
+                PRIMARY KEY (launch_id, serial),
+                FOREIGN KEY (launch_id) REFERENCES launches(launch_id),
+                FOREIGN KEY (serial) REFERENCES notam(serial)
+            )
+        ''')
+
         # Initialize default statuses if empty
         cursor.execute("SELECT COUNT(*) FROM launch_status")
         if cursor.fetchone()[0] == 0:
