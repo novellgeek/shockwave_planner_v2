@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 
-DEFAULT_DB_PATH = r'./shockwave_planner_v2/shockwave_planner.db'
+DEFAULT_DB_PATH = 'shockwave_planner.db'
 
 class LaunchDatabase:
     """Database operations for SHOCKWAVE PLANNER"""
@@ -864,7 +864,7 @@ class LaunchDatabase:
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT l.*, 
-                   ls.location, ls.launch_pad, ls.country,
+                   ls.location, ls.launch_pad, ls.country, ls.latitude, ls.longitude,
                    r.name as rocket_name,
                    st.status_name, st.status_color
             FROM launches l
@@ -882,7 +882,7 @@ class LaunchDatabase:
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT l.*, 
-                   ls.location, ls.launch_pad, ls.country,
+                   ls.location, ls.launch_pad, ls.country, ls.latitude, ls.longitude,
                    r.name as rocket_name,
                    st.status_name, st.status_color
             FROM launches l
@@ -900,7 +900,7 @@ class LaunchDatabase:
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT l.*, 
-                   ls.location, ls.launch_pad, ls.country,
+                   ls.location, ls.launch_pad, ls.country, ls.latitude, ls.longitude,
                    r.name as rocket_name,
                    st.status_name, st.status_color
             FROM launches l
@@ -918,7 +918,7 @@ class LaunchDatabase:
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT l.*, 
-                   ls.location, ls.launch_pad, ls.country,
+                   ls.location, ls.launch_pad, ls.country, ls.latitude, ls.longitude,
                    r.name as rocket_name,
                    st.status_name, st.status_color
             FROM launches l
