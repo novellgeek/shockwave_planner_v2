@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 
-DEFAULT_DB_PATH = 'shockwave_planner.db'
+DEFAULT_DB_PATH = r'./shockwave_planner_v2/shockwave_planner.db'
 
 class LaunchDatabase:
     """Database operations for SHOCKWAVE PLANNER"""
