@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                               QPushButton, QLabel, QTabWidget, QGroupBox,
                               QDialog, QFormLayout, QDialogButtonBox, QLineEdit,
                               QComboBox, QDateEdit, QTimeEdit, QTextEdit,
-                              QMessageBox, QProgressDialog)
+                              QMessageBox, QProgressDialog, QTableWidget, QTableWidgetItem)
 from PyQt6.QtCore import Qt, QDate, QTime, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QFont
 from datetime import datetime
@@ -133,8 +133,13 @@ class LaunchEditorDialog(QDialog):
         layout.addRow("Orbit Type:", self.orbit_combo)
         
         # NOTAM
-        self.notam_edit = QLineEdit()
-        self.notam_edit.setPlaceholderText("e.g., A1234/25")
+        self.notam_edit = QTableWidget()
+        self.notam_edit.setEditTriggers(QTableWidget.EditTrigger.AllEditTriggers)
+        self.notam_edit.setColumnCount(4)
+        self.notam_edit.setRowCount(1)
+        self.notam_edit.setMaximumSize(405,self.notam_edit.rowHeight(0))
+        self.notam_edit.verticalHeader().hide()
+        self.notam_edit.horizontalHeader().hide()
         layout.addRow("NOTAM Reference:", self.notam_edit)
         
         # Status
@@ -191,8 +196,19 @@ class LaunchEditorDialog(QDialog):
             
             self.mission_edit.setText(launch.get('mission_name') or '')
             self.payload_edit.setText(launch.get('payload_name') or '')
-            self.notam_edit.setText(launch.get('notam_reference') or '')
-            
+             
+            notam_data = self.db.conn.cursor().execute("""
+                                                        SELECT ln.serial 
+                                                        FROM launch_notam AS ln 
+                                                        WHERE ln.launch_id == ?;
+                                                       """, 
+                                                       (str(launch['launch_id']),)
+                                                       )
+            notam_data = [dict(row) for row in notam_data.fetchall()]
+            for col in range(len(notam_data)):
+                serial = notam_data[col]["serial"]
+                self.notam_edit.setItem(0, col, QTableWidgetItem(serial))
+
             if launch.get('orbit_type'):
                 index = self.orbit_combo.findText(launch['orbit_type'])
                 if index >= 0:
@@ -394,7 +410,8 @@ class LaunchEditorDialog(QDialog):
             'payload_name': self.payload_edit.text(),
             'orbit_type': self.orbit_combo.currentText(),
             'status_id': self.status_combo.currentData(),
-            'notam_reference': self.notam_edit.text(),
+            # TODO
+            # 'notam_reference': self.notam_edit.text(),
             'remarks': self.remarks_edit.toPlainText(),
             'data_source': 'MANUAL'
         }
