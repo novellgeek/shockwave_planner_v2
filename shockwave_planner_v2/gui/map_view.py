@@ -253,6 +253,7 @@ class MapView(QWidget):
         # Canvas event connections
         self.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
         self.canvas.mpl_connect('button_press_event', self.on_mouse_click)
+        self.canvas.mpl_connect('scroll_event', self.on_mouse_scroll)  # Mouse wheel zoom
         
         # Status label
         self.status_label = QLabel("Loading map...")
@@ -343,12 +344,10 @@ class MapView(QWidget):
         
         self.update_map()
         
-        # Auto-focus on selected launch
-        if self.selected_launch:
-            self.focus_on_selected_launch()
+        # Don't auto-focus - let user click Focus button to zoom
     
     def focus_on_selected_launch(self):
-        """Zoom map to selected launch site and NOTAM area"""
+        """Zoom map to selected launch site and NOTAM area, filling entire canvas"""
         if not self.selected_launch:
             return
         
@@ -368,6 +367,10 @@ class MapView(QWidget):
                 notam_coords = []
             notam_coords.extend(self.selected_launch['custom_notam'])
         
+        # Get canvas aspect ratio (width / height)
+        fig_width, fig_height = self.figure.get_size_inches()
+        canvas_aspect = fig_width / fig_height
+        
         if notam_coords and len(notam_coords) > 0:
             # Calculate bounding box that includes launch site and all NOTAMs
             all_lats = [lat] + [c[0] for c in notam_coords]
@@ -378,25 +381,111 @@ class MapView(QWidget):
             min_lon = min(all_lons)
             max_lon = max(all_lons)
             
-            # Add 10% padding
+            # Add padding (30%)
             lat_range = max_lat - min_lat
             lon_range = max_lon - min_lon
             
-            padding_lat = max(lat_range * 0.1, 0.5)  # At least 0.5 degrees
-            padding_lon = max(lon_range * 0.1, 0.5)
+            padding_lat = max(lat_range * 0.30, 2.0)
+            padding_lon = max(lon_range * 0.30, 2.0)
+            
+            # Calculate ranges with padding
+            padded_lat_range = lat_range + 2*padding_lat
+            padded_lon_range = lon_range + 2*padding_lon
+            
+            # Adjust ranges to match canvas aspect ratio
+            # Aspect ratio = lon_range / lat_range
+            current_aspect = padded_lon_range / padded_lat_range if padded_lat_range > 0 else 1.0
+            
+            if current_aspect < canvas_aspect:
+                # Too tall, need to widen longitude
+                padded_lon_range = padded_lat_range * canvas_aspect
+            else:
+                # Too wide, need to increase latitude
+                padded_lat_range = padded_lon_range / canvas_aspect
+            
+            # Center the view
+            center_lat = (min_lat + max_lat) / 2
+            center_lon = (min_lon + max_lon) / 2
             
             self.ax.set_extent([
-                min_lon - padding_lon,
-                max_lon + padding_lon,
-                min_lat - padding_lat,
-                max_lat + padding_lat
+                center_lon - padded_lon_range/2,
+                center_lon + padded_lon_range/2,
+                center_lat - padded_lat_range/2,
+                center_lat + padded_lat_range/2
             ], crs=ccrs.PlateCarree() if CARTOPY_AVAILABLE else None)
         else:
-            # No NOTAM - just zoom to launch site (tighter: ±2 degrees)
-            self.ax.set_extent([lon - 2, lon + 2, lat - 2, lat + 2], 
-                              crs=ccrs.PlateCarree() if CARTOPY_AVAILABLE else None)
+            # No NOTAM - create extent matching canvas aspect ratio
+            # Start with ±15 degrees base range
+            base_range = 15
+            
+            lat_range = base_range * 2
+            lon_range = lat_range * canvas_aspect
+            
+            self.ax.set_extent([
+                lon - lon_range/2, 
+                lon + lon_range/2, 
+                lat - lat_range/2, 
+                lat + lat_range/2
+            ], crs=ccrs.PlateCarree() if CARTOPY_AVAILABLE else None)
         
         self.canvas.draw_idle()
+    
+    def calculate_great_circle_info(self, lat1, lon1, lat2, lon2):
+        """
+        Calculate great circle distance, azimuth, and inclination between two points
+        
+        Returns:
+            dict with 'distance_km', 'distance_nm', 'azimuth', 'inclination'
+        """
+        from math import radians, degrees, sin, cos, atan2, sqrt, asin, acos
+        
+        # Convert to radians
+        lat1_rad = radians(lat1)
+        lon1_rad = radians(lon1)
+        lat2_rad = radians(lat2)
+        lon2_rad = radians(lon2)
+        
+        # Haversine formula for distance
+        dlat = lat2_rad - lat1_rad
+        dlon = lon2_rad - lon1_rad
+        
+        a = sin(dlat/2)**2 + cos(lat1_rad) * cos(lat2_rad) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a))
+        
+        # Earth radius in km
+        earth_radius_km = 6371.0
+        distance_km = earth_radius_km * c
+        distance_nm = distance_km * 0.539957  # Convert to nautical miles
+        
+        # Calculate azimuth (bearing) from point 1 to point 2
+        y = sin(lon2_rad - lon1_rad) * cos(lat2_rad)
+        x = cos(lat1_rad) * sin(lat2_rad) - sin(lat1_rad) * cos(lat2_rad) * cos(lon2_rad - lon1_rad)
+        azimuth = (degrees(atan2(y, x)) + 360) % 360  # Normalize to 0-360
+        
+        # Calculate orbital inclination from launch azimuth and latitude
+        # Formula: cos(i) = cos(lat) * sin(azimuth)
+        # This gives the inclination of the orbit based on the launch trajectory
+        azimuth_rad = radians(azimuth)
+        
+        # The inclination formula accounts for the launch latitude and direction
+        cos_inclination = cos(lat1_rad) * sin(azimuth_rad)
+        
+        # Clamp to [-1, 1] to avoid numerical errors with acos
+        cos_inclination = max(-1.0, min(1.0, cos_inclination))
+        
+        inclination = degrees(acos(cos_inclination))
+        
+        # Ensure inclination is in the range [0, 180]
+        # For retrograde orbits (azimuth > 180), inclination > 90
+        if inclination < 0:
+            inclination = abs(inclination)
+        
+        return {
+            'distance_km': distance_km,
+            'distance_nm': distance_nm,
+            'azimuth': azimuth,
+            'inclination': inclination
+        }
     
     def get_notam_coordinates(self, launch_id):
         """Get all NOTAM coordinates for a launch"""
@@ -468,6 +557,10 @@ class MapView(QWidget):
         """Update the map display"""
         self.figure.clear()
         
+        # Calculate canvas aspect ratio for consistent fill
+        fig_width, fig_height = self.figure.get_size_inches()
+        canvas_aspect = fig_width / fig_height if fig_height > 0 else 2.4
+        
         # Get launches for current date range
         start_date, end_date = self.get_date_range()
         launches = self.db.get_launches_by_date_range(start_date, end_date)
@@ -475,6 +568,7 @@ class MapView(QWidget):
         # Create map
         if CARTOPY_AVAILABLE:
             self.ax = self.figure.add_subplot(111, projection=ccrs.PlateCarree())
+            # Keep equal aspect for proper geographic proportions
             
             # Dark theme ocean and land
             self.ax.add_feature(cfeature.OCEAN, facecolor='#0f3460', zorder=0)
@@ -486,13 +580,22 @@ class MapView(QWidget):
             self.ax.add_feature(cfeature.BORDERS, linewidth=1.2, 
                               edgecolor='#533483', alpha=0.9, zorder=2)
             
-            # Gridlines in purple
+            # Gridlines in purple - labels INSIDE the map
             gl = self.ax.gridlines(draw_labels=True, linewidth=0.5, 
                                   color='#533483', alpha=0.5, linestyle='-')
             gl.top_labels = False
             gl.right_labels = False
+            gl.left_labels = True
+            gl.bottom_labels = True
             gl.xlabel_style = {'color': '#533483', 'size': 9}
             gl.ylabel_style = {'color': '#533483', 'size': 9}
+            
+            # Move labels inside the plot area
+            try:
+                gl.xpadding = -5  # Negative = inside
+                gl.ypadding = -5  # Negative = inside
+            except:
+                pass  # Some cartopy versions don't support this
             
             # Force gridlines to update with extent
             try:
@@ -501,11 +604,33 @@ class MapView(QWidget):
             except:
                 pass  # Some cartopy versions don't support this
             
+            # Set global extent to fill canvas based on aspect ratio
+            # Base latitude range: -75 to 75 (150 degrees total)
+            lat_range = 150
+            # Calculate longitude range to match aspect ratio
+            lon_range = lat_range * canvas_aspect
+            
+            # Cap longitude at 360 degrees (full world)
+            lon_range = min(lon_range, 360)
+            
+            # Center on 0, 0
+            self.ax.set_extent([
+                -lon_range/2, 
+                lon_range/2, 
+                -lat_range/2, 
+                lat_range/2
+            ], crs=ccrs.PlateCarree())
+            
         else:
             # Simple matplotlib fallback
             self.ax = self.figure.add_subplot(111)
-            self.ax.set_xlim(-180, 180)
-            self.ax.set_ylim(-90, 90)
+            
+            # Match aspect ratio to canvas using pre-calculated value
+            lat_range = 150  # -75 to 75
+            lon_range = min(lat_range * canvas_aspect, 360)
+            
+            self.ax.set_xlim(-lon_range/2, lon_range/2)
+            self.ax.set_ylim(-lat_range/2, lat_range/2)
             self.ax.set_facecolor('#0f3460')
             self.ax.set_xlabel('Longitude', color='#533483')
             self.ax.set_ylabel('Latitude', color='#533483')
@@ -596,8 +721,8 @@ class MapView(QWidget):
         
         self.canvas.draw()
         
-        # Use tight layout to maximize map area
-        self.figure.tight_layout(pad=0.5)
+        # Use tight layout with minimal padding to maximize map area
+        self.figure.tight_layout(pad=0.1)
         
         # Update status
         filter_names = {
@@ -685,6 +810,33 @@ class MapView(QWidget):
             self.draw_great_circle(self.ax, launch_lon, launch_lat, 
                                   notam_lon, notam_lat, 
                                   color=color, linewidth=2, alpha=0.8)
+            
+            # Calculate trajectory information
+            traj_info = self.calculate_great_circle_info(
+                launch_lat, launch_lon, notam_lat, notam_lon
+            )
+            
+            # Create info text box
+            info_text = (
+                f"Distance: {traj_info['distance_km']:.1f} km ({traj_info['distance_nm']:.1f} NM)\n"
+                f"Azimuth: {traj_info['azimuth']:.1f}°\n"
+                f"Inclination: {traj_info['inclination']:.1f}°"
+            )
+            
+            # Position the text box in the upper left corner of the map
+            # Use axes coordinates (0-1 range) so it stays in same place regardless of zoom
+            self.ax.text(0.02, 0.98, info_text,
+                        transform=self.ax.transAxes,  # Use axes coordinates, not data coordinates
+                        fontsize=10,
+                        color='white',
+                        verticalalignment='top',
+                        horizontalalignment='left',
+                        bbox=dict(boxstyle='round,pad=0.5',
+                                facecolor='#1a1a2e',
+                                edgecolor='#533483',
+                                alpha=0.9,
+                                linewidth=1.5),
+                        zorder=100)  # High zorder to appear on top
     
     def on_mouse_move(self, event):
         """Handle mouse movement for hover effects"""
@@ -721,6 +873,46 @@ class MapView(QWidget):
         
         if hover_found:
             self.canvas.draw_idle()
+    
+    def on_mouse_scroll(self, event):
+        """Handle mouse wheel scroll for zoom"""
+        if event.inaxes != self.ax:
+            return
+        
+        # Get current extent
+        if CARTOPY_AVAILABLE:
+            x_lim = self.ax.get_xlim()
+            y_lim = self.ax.get_ylim()
+        else:
+            x_lim = self.ax.get_xlim()
+            y_lim = self.ax.get_ylim()
+        
+        # Calculate center and ranges
+        x_center = (x_lim[0] + x_lim[1]) / 2
+        y_center = (y_lim[0] + y_lim[1]) / 2
+        x_range = x_lim[1] - x_lim[0]
+        y_range = y_lim[1] - y_lim[0]
+        
+        # Zoom factor
+        zoom_factor = 0.85 if event.button == 'up' else 1.15  # Scroll up = zoom in
+        
+        # Calculate new ranges
+        new_x_range = x_range * zoom_factor
+        new_y_range = y_range * zoom_factor
+        
+        # Set new extent
+        if CARTOPY_AVAILABLE:
+            self.ax.set_extent([
+                x_center - new_x_range/2,
+                x_center + new_x_range/2,
+                y_center - new_y_range/2,
+                y_center + new_y_range/2
+            ], crs=ccrs.PlateCarree())
+        else:
+            self.ax.set_xlim(x_center - new_x_range/2, x_center + new_x_range/2)
+            self.ax.set_ylim(y_center - new_y_range/2, y_center + new_y_range/2)
+        
+        self.canvas.draw_idle()
     
     def on_mouse_click(self, event):
         """Handle mouse clicks on site markers"""
