@@ -141,7 +141,14 @@ class LaunchEditorDialog(QDialog):
         self.notam_edit.verticalHeader().hide()
         self.notam_edit.horizontalHeader().hide()
         layout.addRow("NOTAM Reference:", self.notam_edit)
+        self.notam_edit.editTriggers()
         
+        # new NOTAM button
+        add_notam_btn = QPushButton("Add New NOTAM...")
+        add_notam_btn.clicked.connect(self.add_new_notam)
+        layout.addRow("", add_notam_btn)
+
+
         # Status
         self.status_combo = QComboBox()
         statuses = self.db.get_all_statuses()
@@ -196,7 +203,7 @@ class LaunchEditorDialog(QDialog):
             
             self.mission_edit.setText(launch.get('mission_name') or '')
             self.payload_edit.setText(launch.get('payload_name') or '')
-             
+            
             notam_data = self.db.conn.cursor().execute("""
                                                         SELECT ln.serial 
                                                         FROM launch_notam AS ln 
@@ -216,6 +223,51 @@ class LaunchEditorDialog(QDialog):
             
             self.remarks_edit.setPlainText(launch.get('remarks') or '')
     
+    def add_new_notam(self):
+        """Open dialog to add a new NOTAM"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add NOTAM")
+        dialog.setModal(True)
+        
+        layout = QFormLayout()
+        
+        serial_edit = QLineEdit()
+        serial_edit.setPlaceholderText("e.g. F0271/25")
+        layout.addRow("NOTAM serial:", serial_edit)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | 
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addRow(buttons)
+        
+        dialog.setLayout(layout)
+
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Save new site
+            notam_data = {
+                'serial': serial_edit.text()
+           }
+            
+            try:
+                # TODO validate NOTAM serial
+                self.db.conn.cursor().execute("""
+                                                INSERT OR IGNORE INTO notam (serial)
+                                                VALUES (?);
+                                                """,
+                                                (notam_data['serial'],)
+                                            )
+                self.db.conn.commit()
+                              
+                QMessageBox.information(self, "Success", "NOTAM added successfully!")
+            
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to add NOTAM: {e}")
+
+
     def add_new_site(self):
         """Open dialog to add a new launch site"""
         from PyQt6.QtWidgets import QDoubleSpinBox
