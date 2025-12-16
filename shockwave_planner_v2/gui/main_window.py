@@ -410,15 +410,66 @@ class LaunchEditorDialog(QDialog):
             'payload_name': self.payload_edit.text(),
             'orbit_type': self.orbit_combo.currentText(),
             'status_id': self.status_combo.currentData(),
-            # TODO
-            # 'notam_reference': self.notam_edit.text(),
+            'notam_reference': None,
             'remarks': self.remarks_edit.toPlainText(),
             'data_source': 'MANUAL'
         }
-        
+       
         try:
             if self.launch_id:
                 self.db.update_launch(self.launch_id, launch_data)
+                
+                # Update NOTAM entries
+                old_notam = self.db.conn.cursor().execute("""
+                                                        SELECT ln.serial 
+                                                        FROM launch_notam AS ln 
+                                                        WHERE ln.launch_id == ?;
+                                                       """, 
+                                                       (self.launch_id,)
+                                                       )
+                old_notam = [dict(row) for row in old_notam.fetchall()]
+                
+                user_inputs = []
+                for col in range(self.notam_edit.columnCount()):
+                    try:
+                        user_inputs.append(self.notam_edit.item(0, col).data(0))
+                    except:
+                        pass
+
+                for col in range(len(user_inputs)):
+                    new_serial = user_inputs[col]   
+                    try:
+                        old_serial = old_notam[col]['serial']
+                    except:
+                        old_serial = ""
+
+                    if new_serial != old_serial:
+                        if new_serial == "":
+                            self.db.conn.cursor().execute("""
+                                                            DELETE FROM launch_notam
+                                                            WHERE launch_id = ? AND serial = ?;
+                                                        """,
+                                                        (self.launch_id, old_serial,)
+                                                        )
+                            self.db.conn.cursor().execute("COMMIT;")
+                            continue
+                        
+                        self.db.conn.cursor().execute("BEGIN TRANSACTION;")
+                        self.db.conn.cursor().execute("""
+                                                        DELETE FROM launch_notam
+                                                        WHERE launch_id = ? AND serial = ?;
+                                                    """,
+                                                    (self.launch_id, old_serial,)
+                                                    )
+                        self.db.conn.cursor().execute("""
+                                                        INSERT OR IGNORE INTO launch_notam (launch_id, serial)
+                                                        VALUES (?, ?);
+                                                    """,
+                                                    (self.launch_id, new_serial,)
+                                                    )                 
+                        self.db.conn.cursor().execute("COMMIT;")
+                                      
+                
                 QMessageBox.information(self, "Success", "Launch updated successfully!")
             else:
                 self.db.add_launch(launch_data)
