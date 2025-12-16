@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                               QPushButton, QLabel, QTabWidget, QGroupBox,
                               QDialog, QFormLayout, QDialogButtonBox, QLineEdit,
                               QComboBox, QDateEdit, QTimeEdit, QTextEdit,
-                              QMessageBox, QProgressDialog)
+                              QMessageBox, QProgressDialog, QTableWidget, QTableWidgetItem)
 from PyQt6.QtCore import Qt, QDate, QTime, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QFont
 from datetime import datetime
@@ -135,10 +135,22 @@ class LaunchEditorDialog(QDialog):
         layout.addRow("Orbit Type:", self.orbit_combo)
         
         # NOTAM
-        self.notam_edit = QLineEdit()
-        self.notam_edit.setPlaceholderText("e.g., A1234/25")
+        self.notam_edit = QTableWidget()
+        self.notam_edit.setEditTriggers(QTableWidget.EditTrigger.AllEditTriggers)
+        self.notam_edit.setColumnCount(4)
+        self.notam_edit.setRowCount(1)
+        self.notam_edit.setMaximumSize(405,self.notam_edit.rowHeight(0))
+        self.notam_edit.verticalHeader().hide()
+        self.notam_edit.horizontalHeader().hide()
         layout.addRow("NOTAM Reference:", self.notam_edit)
+        self.notam_edit.editTriggers()
         
+        # new NOTAM button
+        add_notam_btn = QPushButton("Add New NOTAM...")
+        add_notam_btn.clicked.connect(self.add_new_notam)
+        layout.addRow("", add_notam_btn)
+
+
         # Status
         self.status_combo = QComboBox()
         statuses = self.db.get_all_statuses()
@@ -193,8 +205,19 @@ class LaunchEditorDialog(QDialog):
             
             self.mission_edit.setText(launch.get('mission_name') or '')
             self.payload_edit.setText(launch.get('payload_name') or '')
-            self.notam_edit.setText(launch.get('notam_reference') or '')
             
+            notam_data = self.db.conn.cursor().execute("""
+                                                        SELECT ln.serial 
+                                                        FROM launch_notam AS ln 
+                                                        WHERE ln.launch_id == ?;
+                                                       """, 
+                                                       (str(launch['launch_id']),)
+                                                       )
+            notam_data = [dict(row) for row in notam_data.fetchall()]
+            for col in range(len(notam_data)):
+                serial = notam_data[col]["serial"]
+                self.notam_edit.setItem(0, col, QTableWidgetItem(serial))
+
             if launch.get('orbit_type'):
                 index = self.orbit_combo.findText(launch['orbit_type'])
                 if index >= 0:
@@ -202,6 +225,51 @@ class LaunchEditorDialog(QDialog):
             
             self.remarks_edit.setPlainText(launch.get('remarks') or '')
     
+    def add_new_notam(self):
+        """Open dialog to add a new NOTAM"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add NOTAM")
+        dialog.setModal(True)
+        
+        layout = QFormLayout()
+        
+        serial_edit = QLineEdit()
+        serial_edit.setPlaceholderText("e.g. F0271/25")
+        layout.addRow("NOTAM serial:", serial_edit)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | 
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addRow(buttons)
+        
+        dialog.setLayout(layout)
+
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Save new site
+            notam_data = {
+                'serial': serial_edit.text()
+           }
+            
+            try:
+                # TODO validate NOTAM serial
+                self.db.conn.cursor().execute("""
+                                                INSERT OR IGNORE INTO notam (serial)
+                                                VALUES (?);
+                                                """,
+                                                (notam_data['serial'],)
+                                            )
+                self.db.conn.commit()
+                              
+                QMessageBox.information(self, "Success", "NOTAM added successfully!")
+            
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to add NOTAM: {e}")
+
+
     def add_new_site(self):
         """Open dialog to add a new launch site"""
         from PyQt6.QtWidgets import QDoubleSpinBox
@@ -396,14 +464,66 @@ class LaunchEditorDialog(QDialog):
             'payload_name': self.payload_edit.text(),
             'orbit_type': self.orbit_combo.currentText(),
             'status_id': self.status_combo.currentData(),
-            'notam_reference': self.notam_edit.text(),
+            'notam_reference': None,
             'remarks': self.remarks_edit.toPlainText(),
             'data_source': 'MANUAL'
         }
-        
+       
         try:
             if self.launch_id:
                 self.db.update_launch(self.launch_id, launch_data)
+                
+                # Update NOTAM entries
+                old_notam = self.db.conn.cursor().execute("""
+                                                        SELECT ln.serial 
+                                                        FROM launch_notam AS ln 
+                                                        WHERE ln.launch_id == ?;
+                                                       """, 
+                                                       (self.launch_id,)
+                                                       )
+                old_notam = [dict(row) for row in old_notam.fetchall()]
+                
+                user_inputs = []
+                for col in range(self.notam_edit.columnCount()):
+                    try:
+                        user_inputs.append(self.notam_edit.item(0, col).data(0))
+                    except:
+                        pass
+
+                for col in range(len(user_inputs)):
+                    new_serial = user_inputs[col]   
+                    try:
+                        old_serial = old_notam[col]['serial']
+                    except:
+                        old_serial = ""
+
+                    if new_serial != old_serial:
+                        if new_serial == "":
+                            self.db.conn.cursor().execute("""
+                                                            DELETE FROM launch_notam
+                                                            WHERE launch_id = ? AND serial = ?;
+                                                        """,
+                                                        (self.launch_id, old_serial,)
+                                                        )
+                            self.db.conn.cursor().execute("COMMIT;")
+                            continue
+                        
+                        self.db.conn.cursor().execute("BEGIN TRANSACTION;")
+                        self.db.conn.cursor().execute("""
+                                                        DELETE FROM launch_notam
+                                                        WHERE launch_id = ? AND serial = ?;
+                                                    """,
+                                                    (self.launch_id, old_serial,)
+                                                    )
+                        self.db.conn.cursor().execute("""
+                                                        INSERT OR IGNORE INTO launch_notam (launch_id, serial)
+                                                        VALUES (?, ?);
+                                                    """,
+                                                    (self.launch_id, new_serial,)
+                                                    )                 
+                        self.db.conn.cursor().execute("COMMIT;")
+                                      
+                
                 QMessageBox.information(self, "Success", "Launch updated successfully!")
             else:
                 self.db.add_launch(launch_data)
