@@ -19,7 +19,7 @@ from data.database import LaunchDatabase
 class SpaceDevsAPI:
     """Interface to The Space Devs Launch Library API"""
     
-    BASE_URL = "https://ll.thespacedevs.com/2.3.0/launches/"
+    BASE_URL = "https://lldev.thespacedevs.com/2.3.0/launches/"
     RATE_LIMIT_DELAY = 0.5  # seconds between requests
     
     def __init__(self, db: LaunchDatabase):

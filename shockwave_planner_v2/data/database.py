@@ -201,7 +201,8 @@ class LaunchDatabase:
         # NOTAM table (NEW in v2.0)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS notam (
-                serial TEXT PRIMARY KEY
+                serial TEXT PRIMARY KEY,
+                notam_text TEXT
             )
         ''')
         
@@ -279,6 +280,19 @@ class LaunchDatabase:
             cursor.execute('''
                 ALTER TABLE reentry_sites 
                 ADD COLUMN turnaround_days INTEGER DEFAULT 7
+            ''')
+            self.conn.commit()
+            print("   ✓ Migration complete")
+        
+        # Migration: Add notam_text to notam table
+        try:
+            cursor.execute("SELECT notam_text FROM notam LIMIT 1")
+        except sqlite3.OperationalError:
+            # Column doesn't exist, add it
+            print("🔧 Running migration: Adding notam_text to notam...")
+            cursor.execute('''
+                ALTER TABLE notam 
+                ADD COLUMN notam_text TEXT
             ''')
             self.conn.commit()
             print("   ✓ Migration complete")
