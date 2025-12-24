@@ -13,7 +13,7 @@ import os
 from PyQt6.QtWidgets import QApplication, QSplashScreen
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPixmap
-from gui.main_window import MainWindow
+from data.db_setup import init_db
 
 
 def main():
@@ -39,6 +39,12 @@ def main():
         splash.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
         splash.show()
         app.processEvents()
+    
+    # Initialise database
+    init_db()
+    
+    # import GUI after DB init to avoid Django settings-not-configured errors
+    from gui.main_window import MainWindow
     
     # Create main window
     window = MainWindow()
