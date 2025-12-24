@@ -1,3 +1,6 @@
+# Original Database Interface
+
+```
 """
 SHOCKWAVE PLANNER v2.0 - Database Layer
 SQLite database interface with Space Devs API integration
@@ -12,11 +15,11 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 
-DEFAULT_DB_PATH = 'shockwave_planner.db'
+DEFAULT_DB_PATH = r'./shockwave_planner_v2/shockwave_planner.db'
 
 class LaunchDatabase:
     """Database operations for SHOCKWAVE PLANNER"""
-    
+
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
         """Initialize database connection"""
         self.db_path = db_path
@@ -24,11 +27,11 @@ class LaunchDatabase:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.init_database()
-    
+
     def init_database(self):
         """Initialize database schema"""
         cursor = self.conn.cursor()
-        
+
         # Launch Sites table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS launch_sites (
@@ -44,7 +47,7 @@ class LaunchDatabase:
                 UNIQUE(location, launch_pad)
             )
         ''')
-        
+
         # Rockets table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS rockets (
@@ -63,7 +66,7 @@ class LaunchDatabase:
                 external_id TEXT
             )
         ''')
-        
+
         # Launch Vehicles table (specific configurations)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS launch_vehicles (
@@ -75,7 +78,7 @@ class LaunchDatabase:
                 FOREIGN KEY (rocket_id) REFERENCES rockets(rocket_id)
             )
         ''')
-        
+
         # Launch Status table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS launch_status (
@@ -86,7 +89,7 @@ class LaunchDatabase:
                 description TEXT
             )
         ''')
-        
+
         # Launches table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS launches (
@@ -120,7 +123,7 @@ class LaunchDatabase:
                 FOREIGN KEY (status_id) REFERENCES launch_status(status_id)
             )
         ''')
-        
+
         # Launch TLEs table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS launch_tles (
@@ -135,7 +138,7 @@ class LaunchDatabase:
                 FOREIGN KEY (launch_id) REFERENCES launches(launch_id)
             )
         ''')
-        
+
         # Launch Predictions table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS launch_predictions (
@@ -148,7 +151,7 @@ class LaunchDatabase:
                 FOREIGN KEY (launch_id) REFERENCES launches(launch_id)
             )
         ''')
-        
+
         # Re-entry Sites table (NEW in v2.0)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS reentry_sites (
@@ -164,7 +167,7 @@ class LaunchDatabase:
                 UNIQUE(location, drop_zone)
             )
         ''')
-        
+
         # Re-entries table (NEW in v2.0)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS reentries (
@@ -184,7 +187,24 @@ class LaunchDatabase:
                 FOREIGN KEY (status_id) REFERENCES launch_status(status_id)
             )
         ''')
-        
+
+        # Re-entry Vehicle
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS reentry_vehicle (
+                vehicle_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                alternative_name TEXT,
+                family TEXT,
+                variant TEXT,
+                manufacturer TEXT,
+                country TEXT,
+                payload INTEGER,
+                decelerator TEXT,
+                remarks TEXT,
+                external_id TEXT
+            )
+        ''')
+
         # Sync Log table (NEW in v2.0)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS sync_log (
@@ -205,7 +225,7 @@ class LaunchDatabase:
                 notam_text TEXT
             )
         ''')
-        
+
         # NOTAM - launches m-n relation table (NEW in v2.0)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS launch_notam (
@@ -221,12 +241,12 @@ class LaunchDatabase:
         cursor.execute("SELECT COUNT(*) FROM launch_status")
         if cursor.fetchone()[0] == 0:
             self._init_default_statuses()
-        
+
         # Run migrations
         self._run_migrations()
-        
+
         self.conn.commit()
-    
+
     def _init_default_statuses(self):
         """Initialize default launch status values"""
         statuses = [
@@ -239,25 +259,25 @@ class LaunchDatabase:
             ('Hold', 'HOLD', '#FFAA00', 'Launch on hold'),
             ('In Flight', 'FLT', '#00AAFF', 'Vehicle in flight'),
         ]
-        
+
         cursor = self.conn.cursor()
         cursor.executemany('''
             INSERT INTO launch_status (status_name, status_abbr, status_color, description)
             VALUES (?, ?, ?, ?)
         ''', statuses)
         self.conn.commit()
-    
+
     def get_status_id_by_name(self, status_name: str) -> Optional[int]:
         """Get status_id by status name"""
         cursor = self.conn.cursor()
         cursor.execute('SELECT status_id FROM launch_status WHERE status_name = ?', (status_name,))
         result = cursor.fetchone()
         return result[0] if result else None
-    
+
     def _run_migrations(self):
         """Run database migrations for schema updates"""
         cursor = self.conn.cursor()
-        
+
         # Migration: Add turnaround_days to launch_sites
         try:
             cursor.execute("SELECT turnaround_days FROM launch_sites LIMIT 1")
@@ -265,25 +285,25 @@ class LaunchDatabase:
             # Column doesn't exist, add it
             print("🔧 Running migration: Adding turnaround_days to launch_sites...")
             cursor.execute('''
-                ALTER TABLE launch_sites 
+                ALTER TABLE launch_sites
                 ADD COLUMN turnaround_days INTEGER DEFAULT 7
             ''')
             self.conn.commit()
             print("   ✓ Migration complete")
-        
-        # Migration: Add turnaround_days to reentry_sites  
+
+        # Migration: Add turnaround_days to reentry_sites
         try:
             cursor.execute("SELECT turnaround_days FROM reentry_sites LIMIT 1")
         except sqlite3.OperationalError:
             # Column doesn't exist, add it
             print("🔧 Running migration: Adding turnaround_days to reentry_sites...")
             cursor.execute('''
-                ALTER TABLE reentry_sites 
+                ALTER TABLE reentry_sites
                 ADD COLUMN turnaround_days INTEGER DEFAULT 7
             ''')
             self.conn.commit()
             print("   ✓ Migration complete")
-        
+
         # Migration: Add notam_text to notam table
         try:
             cursor.execute("SELECT notam_text FROM notam LIMIT 1")
@@ -291,12 +311,12 @@ class LaunchDatabase:
             # Column doesn't exist, add it
             print("🔧 Running migration: Adding notam_text to notam...")
             cursor.execute('''
-                ALTER TABLE notam 
+                ALTER TABLE notam
                 ADD COLUMN notam_text TEXT
             ''')
             self.conn.commit()
             print("   ✓ Migration complete")
-        
+
         # Migration: Add additional rocket fields
         try:
             cursor.execute("SELECT alternative_name FROM rockets LIMIT 1")
@@ -305,21 +325,21 @@ class LaunchDatabase:
             cursor.execute('ALTER TABLE rockets ADD COLUMN alternative_name TEXT')
             self.conn.commit()
             print("   ✓ Added alternative_name")
-        
+
         try:
             cursor.execute("SELECT boosters FROM rockets LIMIT 1")
         except sqlite3.OperationalError:
             cursor.execute('ALTER TABLE rockets ADD COLUMN boosters TEXT')
             self.conn.commit()
             print("   ✓ Added boosters")
-        
+
         try:
             cursor.execute("SELECT payload_sso FROM rockets LIMIT 1")
         except sqlite3.OperationalError:
             cursor.execute('ALTER TABLE rockets ADD COLUMN payload_sso TEXT')
             self.conn.commit()
             print("   ✓ Added payload_sso")
-        
+
         try:
             cursor.execute("SELECT payload_tli FROM rockets LIMIT 1")
         except sqlite3.OperationalError:
@@ -328,9 +348,9 @@ class LaunchDatabase:
             print("   ✓ Added payload_tli")
             print("   ✓ Rocket fields migration complete")
 
-    
+
     # ==================== SITE OPERATIONS ====================
-    
+
     def get_all_sites(self, site_type: str = 'LAUNCH') -> List[Dict]:
         """Get all launch/reentry sites"""
         if site_type == 'REENTRY':
@@ -348,13 +368,13 @@ class LaunchDatabase:
                 FROM launch_sites
                 ORDER BY location, launch_pad
             ''')
-        
+
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def add_site(self, site_data: Dict, site_type: str = 'LAUNCH') -> int:
         """Add a new launch or reentry site"""
         cursor = self.conn.cursor()
-        
+
         if site_type == 'REENTRY':
             cursor.execute('''
                 INSERT INTO reentry_sites (location, drop_zone, latitude, longitude, country, zone_type, external_id, turnaround_days)
@@ -383,16 +403,16 @@ class LaunchDatabase:
                 site_data.get('external_id'),
                 site_data.get('turnaround_days', 7)
             ))
-        
+
         self.conn.commit()
         return cursor.lastrowid
-    
+
     def update_site(self, site_id: int, site_data: Dict):
         """Update an existing launch site"""
         cursor = self.conn.cursor()
-        
+
         site_type = site_data.get('site_type', 'LAUNCH')
-        
+
         if site_type == 'REENTRY':
             cursor.execute('''
                 UPDATE reentry_sites SET
@@ -424,27 +444,27 @@ class LaunchDatabase:
                 site_data.get('turnaround_days', 7),
                 site_id
             ))
-        
+
         self.conn.commit()
-    
+
     def delete_site(self, site_id: int, site_type: str = 'LAUNCH'):
         """Delete a launch site or reentry site"""
         cursor = self.conn.cursor()
-        
+
         if site_type == 'REENTRY':
             cursor.execute('DELETE FROM reentry_sites WHERE reentry_site_id = ?', (site_id,))
         else:
             cursor.execute('DELETE FROM launch_sites WHERE site_id = ?', (site_id,))
-        
+
         self.conn.commit()
-    
+
     def calculate_pad_turnaround(self, site_id: int) -> Optional[int]:
         """
         Calculate the shortest turnaround time for a launch pad based on successful launches.
         Returns the minimum number of days between consecutive successful launches, or None if insufficient data.
         """
         cursor = self.conn.cursor()
-        
+
         # Get all successful launches from this site, ordered by date
         cursor.execute('''
             SELECT l.launch_date
@@ -453,45 +473,45 @@ class LaunchDatabase:
             WHERE l.site_id = ? AND st.status_name = 'Success'
             ORDER BY l.launch_date ASC
         ''', (site_id,))
-        
+
         launches = cursor.fetchall()
-        
+
         if len(launches) < 2:
             return None  # Need at least 2 successful launches to calculate turnaround
-        
+
         # Calculate days between each consecutive pair
         min_turnaround = None
-        
+
         for i in range(1, len(launches)):
             prev_date = datetime.strptime(launches[i-1]['launch_date'], '%Y-%m-%d')
             curr_date = datetime.strptime(launches[i]['launch_date'], '%Y-%m-%d')
-            
+
             days_between = (curr_date - prev_date).days
-            
+
             if min_turnaround is None or days_between < min_turnaround:
                 min_turnaround = days_between
-        
+
         return min_turnaround
-    
+
     def update_pad_turnaround_from_history(self, site_id: int) -> bool:
         """
         Update a launch pad's turnaround_days based on successful launch history.
         Returns True if updated, False if insufficient data.
         """
         turnaround = self.calculate_pad_turnaround(site_id)
-        
+
         if turnaround is not None:
             cursor = self.conn.cursor()
             cursor.execute('''
-                UPDATE launch_sites 
+                UPDATE launch_sites
                 SET turnaround_days = ?
                 WHERE site_id = ?
             ''', (turnaround, site_id))
             self.conn.commit()
             return True
-        
+
         return False
-    
+
     def update_all_pad_turnarounds_from_history(self) -> Dict[str, int]:
         """
         Update turnaround_days for all launch pads based on their successful launch history.
@@ -500,21 +520,21 @@ class LaunchDatabase:
         cursor = self.conn.cursor()
         cursor.execute('SELECT site_id FROM launch_sites WHERE site_type = "LAUNCH"')
         sites = cursor.fetchall()
-        
+
         updated = 0
         skipped = 0
-        
+
         for site in sites:
             site_id = site['site_id']
             if self.update_pad_turnaround_from_history(site_id):
                 updated += 1
             else:
                 skipped += 1
-        
+
         return {'updated': updated, 'skipped': skipped}
-    
+
     # ==================== ROCKET OPERATIONS ====================
-    
+
     def get_all_rockets(self) -> List[Dict]:
         """Get all rockets"""
         cursor = self.conn.cursor()
@@ -525,7 +545,7 @@ class LaunchDatabase:
             ORDER BY name
         ''')
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def add_rocket(self, rocket_data: Dict) -> int:
         """Add a new rocket"""
         cursor = self.conn.cursor()
@@ -554,14 +574,14 @@ class LaunchDatabase:
         ))
         self.conn.commit()
         return cursor.lastrowid
-    
+
     def update_rocket(self, rocket_id: int, rocket_data: Dict):
         """Update an existing rocket"""
         cursor = self.conn.cursor()
         cursor.execute('''
             UPDATE rockets SET
                 name = ?, alternative_name = ?, family = ?, variant = ?, manufacturer = ?,
-                country = ?, stages = ?, boosters = ?, 
+                country = ?, stages = ?, boosters = ?,
                 payload_leo = ?, payload_sso = ?, payload_gto = ?, payload_tli = ?,
                 height = ?, diameter = ?, mass = ?
             WHERE rocket_id = ?
@@ -584,16 +604,16 @@ class LaunchDatabase:
             rocket_id
         ))
         self.conn.commit()
-    
+
     def update_rocket_preserve_manual(self, rocket_id: int, rocket_data: Dict):
         """Update rocket but preserve manually entered fields if API data is missing
         This is used during Space Devs sync to avoid overwriting manual data"""
         cursor = self.conn.cursor()
-        
+
         # Get current rocket data
         cursor.execute('SELECT * FROM rockets WHERE rocket_id = ?', (rocket_id,))
         current = dict(cursor.fetchone())
-        
+
         # Only update fields that are provided in rocket_data
         # If a field is None in rocket_data, keep the current value
         update_data = {
@@ -613,11 +633,11 @@ class LaunchDatabase:
             'diameter': rocket_data.get('diameter') or current['diameter'],
             'mass': rocket_data.get('mass') or current['mass']
         }
-        
+
         cursor.execute('''
             UPDATE rockets SET
                 name = ?, alternative_name = ?, family = ?, variant = ?, manufacturer = ?,
-                country = ?, stages = ?, boosters = ?, 
+                country = ?, stages = ?, boosters = ?,
                 payload_leo = ?, payload_sso = ?, payload_gto = ?, payload_tli = ?,
                 height = ?, diameter = ?, mass = ?
             WHERE rocket_id = ?
@@ -640,35 +660,35 @@ class LaunchDatabase:
             rocket_id
         ))
         self.conn.commit()
-    
+
     def delete_rocket(self, rocket_id: int):
         """Delete a rocket"""
         cursor = self.conn.cursor()
         cursor.execute('DELETE FROM rockets WHERE rocket_id = ?', (rocket_id,))
         self.conn.commit()
-    
+
     def find_or_create_rocket(self, name: str, external_id: str = None) -> int:
         """Find existing rocket or create new one"""
         cursor = self.conn.cursor()
-        
+
         # Try to find by external_id first
         if external_id:
             cursor.execute('SELECT rocket_id FROM rockets WHERE external_id = ?', (external_id,))
             result = cursor.fetchone()
             if result:
                 return result[0]
-        
+
         # Try to find by name
         cursor.execute('SELECT rocket_id FROM rockets WHERE name = ?', (name,))
         result = cursor.fetchone()
         if result:
             return result[0]
-        
+
         # Create new rocket
         return self.add_rocket({'name': name, 'external_id': external_id})
-    
+
     # ==================== RE-ENTRY VEHICLE OPERATIONS ====================
-    
+
     def get_all_reentry_vehicles(self) -> List[Dict]:
         """Get all re-entry vehicles"""
         cursor = self.conn.cursor()
@@ -679,7 +699,7 @@ class LaunchDatabase:
             ORDER BY name
         ''')
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def add_reentry_vehicle(self, vehicle_data: Dict) -> int:
         """Add a new re-entry vehicle"""
         cursor = self.conn.cursor()
@@ -702,7 +722,7 @@ class LaunchDatabase:
         ))
         self.conn.commit()
         return cursor.lastrowid
-    
+
     def update_reentry_vehicle(self, vehicle_id: int, vehicle_data: Dict):
         """Update an existing re-entry vehicle"""
         cursor = self.conn.cursor()
@@ -726,15 +746,15 @@ class LaunchDatabase:
             vehicle_id
         ))
         self.conn.commit()
-    
+
     def delete_reentry_vehicle(self, vehicle_id: int):
         """Delete a re-entry vehicle"""
         cursor = self.conn.cursor()
         cursor.execute('DELETE FROM reentry_vehicle WHERE vehicle_id = ?', (vehicle_id,))
         self.conn.commit()
-        
+
     # ==================== STATUS OPERATIONS ====================
-    
+
     def get_all_statuses(self) -> List[Dict]:
         """Get all launch statuses"""
         cursor = self.conn.cursor()
@@ -744,16 +764,16 @@ class LaunchDatabase:
             ORDER BY status_id
         ''')
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def find_status_by_name(self, name: str) -> Optional[int]:
         """Find status ID by name (case-insensitive)"""
         cursor = self.conn.cursor()
         cursor.execute('SELECT status_id FROM launch_status WHERE LOWER(status_name) = LOWER(?)', (name,))
         result = cursor.fetchone()
         return result[0] if result else None
-    
+
     # ==================== LAUNCH OPERATIONS ====================
-    
+
     def add_launch(self, launch_data: Dict) -> int:
         """Add a new launch"""
         cursor = self.conn.cursor()
@@ -790,30 +810,30 @@ class LaunchDatabase:
         ))
         self.conn.commit()
         launch_id = cursor.lastrowid
-        
+
         # Auto-update pad turnaround if status is Success
         if launch_data.get('status_id'):
             status_name = self._get_status_name(launch_data['status_id'])
             if status_name == 'Success' and launch_data.get('site_id'):
                 self.update_pad_turnaround_from_history(launch_data['site_id'])
-        
+
         return launch_id
-    
+
     def _get_status_name(self, status_id: int) -> Optional[str]:
         """Helper method to get status name from status_id"""
         cursor = self.conn.cursor()
         cursor.execute('SELECT status_name FROM launch_status WHERE status_id = ?', (status_id,))
         result = cursor.fetchone()
         return result['status_name'] if result else None
-    
+
     def update_launch(self, launch_id: int, launch_data: Dict):
         """Update an existing launch"""
         cursor = self.conn.cursor()
-        
+
         # Build UPDATE query dynamically based on provided fields
         fields = []
         values = []
-        
+
         field_mapping = {
             'launch_date': 'launch_date',
             'launch_time': 'launch_time',
@@ -837,21 +857,21 @@ class LaunchDatabase:
             'data_source': 'data_source',
             'external_id': 'external_id'
         }
-        
+
         for key, db_field in field_mapping.items():
             if key in launch_data:
                 fields.append(f"{db_field} = ?")
                 values.append(launch_data[key])
-        
+
         if not fields:
             return
-        
+
         values.append(launch_id)
         query = f"UPDATE launches SET {', '.join(fields)}, last_updated = CURRENT_TIMESTAMP WHERE launch_id = ?"
-        
+
         cursor.execute(query, values)
         self.conn.commit()
-        
+
         # Auto-update pad turnaround if status changed to Success
         if 'status_id' in launch_data:
             status_name = self._get_status_name(launch_data['status_id'])
@@ -863,21 +883,21 @@ class LaunchDatabase:
                     result = cursor.fetchone()
                     if result:
                         site_id = result['site_id']
-                
+
                 if site_id:
                     self.update_pad_turnaround_from_history(site_id)
-    
+
     def delete_launch(self, launch_id: int):
         """Delete a launch"""
         cursor = self.conn.cursor()
         cursor.execute('DELETE FROM launches WHERE launch_id = ?', (launch_id,))
         self.conn.commit()
-    
+
     def get_all_launches(self) -> List[Dict]:
         """Get all launches from database"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT l.*, 
+            SELECT l.*,
                    ls.location, ls.launch_pad, ls.country, ls.latitude, ls.longitude,
                    r.name as rocket_name,
                    st.status_name, st.status_color
@@ -888,14 +908,14 @@ class LaunchDatabase:
             ORDER BY l.launch_date DESC, l.launch_time DESC
             LIMIT 1000
         ''')
-        
+
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def get_launches_by_month(self, year: int, month: int) -> List[Dict]:
         """Get all launches for a specific month"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT l.*, 
+            SELECT l.*,
                    ls.location, ls.launch_pad, ls.country, ls.latitude, ls.longitude,
                    r.name as rocket_name,
                    st.status_name, st.status_color
@@ -906,14 +926,14 @@ class LaunchDatabase:
             WHERE strftime('%Y', l.launch_date) = ? AND strftime('%m', l.launch_date) = ?
             ORDER BY l.launch_date, l.launch_time
         ''', (str(year), f'{month:02d}'))
-        
+
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def get_launches_by_date_range(self, start_date: str, end_date: str) -> List[Dict]:
         """Get launches within a date range"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT l.*, 
+            SELECT l.*,
                    ls.location, ls.launch_pad, ls.country, ls.latitude, ls.longitude,
                    r.name as rocket_name,
                    st.status_name, st.status_color
@@ -924,14 +944,14 @@ class LaunchDatabase:
             WHERE l.launch_date BETWEEN ? AND ?
             ORDER BY l.launch_date, l.launch_time
         ''', (start_date, end_date))
-        
+
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def find_launch_by_external_id(self, external_id: str) -> Optional[Dict]:
         """Find launch by external ID (e.g., Space Devs ID)"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT l.*, 
+            SELECT l.*,
                    ls.location, ls.launch_pad, ls.country, ls.latitude, ls.longitude,
                    r.name as rocket_name,
                    st.status_name, st.status_color
@@ -941,20 +961,20 @@ class LaunchDatabase:
             LEFT JOIN launch_status st ON l.status_id = st.status_id
             WHERE l.external_id = ?
         ''', (external_id,))
-        
+
         result = cursor.fetchone()
         return dict(result) if result else None
-    
+
     # ==================== STATISTICS ====================
-    
+
     def get_statistics(self) -> Dict:
         """Get launch statistics"""
         cursor = self.conn.cursor()
-        
+
         # Total launches
         cursor.execute('SELECT COUNT(*) FROM launches')
         total = cursor.fetchone()[0]
-        
+
         # Success/failure counts using status_name
         cursor.execute('''
             SELECT COUNT(*) FROM launches l
@@ -962,17 +982,17 @@ class LaunchDatabase:
             WHERE s.status_name = 'Success'
         ''')
         successful = cursor.fetchone()[0]
-        
+
         cursor.execute('''
             SELECT COUNT(*) FROM launches l
             LEFT JOIN launch_status s ON l.status_id = s.status_id
             WHERE s.status_name IN ('Failure', 'Partial Failure')
         ''')
         failed = cursor.fetchone()[0]
-        
+
         # Pending (everything else)
         pending = total - successful - failed
-        
+
         # Top rockets
         cursor.execute('''
             SELECT r.name, COUNT(*) as count
@@ -983,7 +1003,7 @@ class LaunchDatabase:
             LIMIT 10
         ''')
         by_rocket = [dict(row) for row in cursor.fetchall()]
-        
+
         # By site
         cursor.execute('''
             SELECT ls.location, COUNT(*) as count
@@ -993,7 +1013,7 @@ class LaunchDatabase:
             ORDER BY count DESC
         ''')
         by_site = [dict(row) for row in cursor.fetchall()]
-        
+
         return {
             'total_launches': total,
             'successful': successful,
@@ -1002,48 +1022,48 @@ class LaunchDatabase:
             'by_rocket': by_rocket,
             'by_site': by_site
         }
-    
+
     def get_yearly_statistics(self, years: int = 5) -> List[Dict]:
         """Get launch statistics by year for the past N years"""
         cursor = self.conn.cursor()
-        
+
         stats_by_year = []
         current_year = datetime.now().year
-        
+
         for year in range(current_year - years + 1, current_year + 1):
             # Total launches for the year
             cursor.execute('''
-                SELECT COUNT(*) FROM launches 
+                SELECT COUNT(*) FROM launches
                 WHERE strftime('%Y', launch_date) = ?
             ''', (str(year),))
             total = cursor.fetchone()[0]
-            
+
             # Successful launches (status_name = 'Success')
             cursor.execute('''
                 SELECT COUNT(*) FROM launches l
                 LEFT JOIN launch_status s ON l.status_id = s.status_id
-                WHERE strftime('%Y', l.launch_date) = ? 
+                WHERE strftime('%Y', l.launch_date) = ?
                 AND s.status_name = 'Success'
             ''', (str(year),))
             successful = cursor.fetchone()[0]
-            
+
             # Failed launches (status_name = 'Failure' or 'Partial Failure')
             cursor.execute('''
                 SELECT COUNT(*) FROM launches l
                 LEFT JOIN launch_status s ON l.status_id = s.status_id
-                WHERE strftime('%Y', l.launch_date) = ? 
+                WHERE strftime('%Y', l.launch_date) = ?
                 AND (s.status_name = 'Failure' OR s.status_name = 'Partial Failure')
             ''', (str(year),))
             failed = cursor.fetchone()[0]
-            
+
             # Pending launches (everything else)
             pending = total - successful - failed
-            
+
             # Calculate success rate
             success_rate = 0
             if successful + failed > 0:
                 success_rate = (successful / (successful + failed)) * 100
-            
+
             stats_by_year.append({
                 'year': year,
                 'total': total,
@@ -1052,15 +1072,15 @@ class LaunchDatabase:
                 'pending': pending,
                 'success_rate': success_rate
             })
-        
+
         return stats_by_year
-    
+
     # ==================== CHART DATA METHODS (NEW in v2.0) ====================
-    
+
     def get_countries(self) -> List[str]:
         """Get list of all countries with launches"""
         cursor = self.conn.cursor()
-        
+
         # Get countries from launch_sites
         cursor.execute('''
             SELECT DISTINCT ls.country
@@ -1069,14 +1089,14 @@ class LaunchDatabase:
             WHERE ls.country IS NOT NULL AND ls.country != ''
             ORDER BY ls.country
         ''')
-        
+
         countries = [row[0] for row in cursor.fetchall()]
         return countries
-    
+
     def get_launch_sites_by_country(self, country: str = None) -> List[str]:
         """Get launch sites, optionally filtered by country"""
         cursor = self.conn.cursor()
-        
+
         if country:
             cursor.execute('''
                 SELECT DISTINCT ls.location
@@ -1092,14 +1112,14 @@ class LaunchDatabase:
                 INNER JOIN launches l ON ls.site_id = l.site_id
                 ORDER BY ls.location
             ''')
-        
+
         sites = [row[0] for row in cursor.fetchall()]
         return sites
-    
+
     def get_rockets_by_country(self, country: str = None) -> List[str]:
         """Get rockets, optionally filtered by country"""
         cursor = self.conn.cursor()
-        
+
         if country:
             cursor.execute('''
                 SELECT DISTINCT r.name
@@ -1115,36 +1135,36 @@ class LaunchDatabase:
                 INNER JOIN launches l ON r.rocket_id = l.rocket_id
                 ORDER BY r.name
             ''')
-        
+
         rockets = [row[0] for row in cursor.fetchall()]
         return rockets
-    
-    def get_launch_data_monthly(self, year: int, country: str = None, 
+
+    def get_launch_data_monthly(self, year: int, country: str = None,
                                 site: str = None, rocket: str = None) -> Tuple[List[int], List[int]]:
         """
         Get monthly launch counts for a specific year with optional filters
-        
+
         Args:
             year: Year to get data for
             country: Optional country filter
             site: Optional launch site filter
             rocket: Optional rocket filter
-        
+
         Returns:
             tuple: (months list, counts list) where months are 1-12
         """
         cursor = self.conn.cursor()
-        
+
         # Build query dynamically based on filters
         query = '''
             SELECT strftime('%m', l.launch_date) as month, COUNT(*) as count
             FROM launches l
         '''
-        
+
         joins = []
         conditions = ["strftime('%Y', l.launch_date) = ?"]
         params = [str(year)]
-        
+
         # Add joins and conditions based on filters
         if country or site:
             joins.append("INNER JOIN launch_sites ls ON l.site_id = ls.site_id")
@@ -1154,47 +1174,47 @@ class LaunchDatabase:
             if site:
                 conditions.append("ls.location = ?")
                 params.append(site)
-        
+
         if rocket:
             joins.append("INNER JOIN rockets r ON l.rocket_id = r.rocket_id")
             conditions.append("r.name = ?")
             params.append(rocket)
-        
+
         # Combine query parts
         if joins:
             query += " " + " ".join(joins)
         query += " WHERE " + " AND ".join(conditions)
         query += " GROUP BY month ORDER BY month"
-        
+
         cursor.execute(query, params)
         results = cursor.fetchall()
-        
+
         # Create full 12-month data (fill missing months with 0)
         month_counts = {int(row[0]): row[1] for row in results}
         months = list(range(1, 13))
         counts = [month_counts.get(m, 0) for m in months]
-        
+
         return months, counts
-    
-    def get_launch_data_daily(self, year: int, num_months: int, 
-                              country: str = None, site: str = None, 
+
+    def get_launch_data_daily(self, year: int, num_months: int,
+                              country: str = None, site: str = None,
                               rocket: str = None) -> Tuple[List[str], List[int]]:
         """
         Get daily launch counts for specified number of months from current date
-        
+
         Args:
             year: Year to get data for
             num_months: Number of months to include
             country: Optional country filter
             site: Optional launch site filter
             rocket: Optional rocket filter
-        
+
         Returns:
             tuple: (dates list, counts list)
         """
         from datetime import timedelta
         cursor = self.conn.cursor()
-        
+
         # Calculate date range (ending at current date in the specified year)
         current_date = datetime.now()
         if year == current_date.year:
@@ -1202,15 +1222,15 @@ class LaunchDatabase:
         else:
             # For past years, use end of year
             end_date = datetime(year, 12, 31)
-        
+
         start_date = end_date - timedelta(days=num_months * 30)
-        
+
         # Build query dynamically
         query = '''
             SELECT l.launch_date, COUNT(*) as count
             FROM launches l
         '''
-        
+
         joins = []
         conditions = [
             "l.launch_date >= ?",
@@ -1222,7 +1242,7 @@ class LaunchDatabase:
             end_date.strftime('%Y-%m-%d'),
             str(year)
         ]
-        
+
         # Add joins and conditions based on filters
         if country or site:
             joins.append("INNER JOIN launch_sites ls ON l.site_id = ls.site_id")
@@ -1232,24 +1252,24 @@ class LaunchDatabase:
             if site:
                 conditions.append("ls.location = ?")
                 params.append(site)
-        
+
         if rocket:
             joins.append("INNER JOIN rockets r ON l.rocket_id = r.rocket_id")
             conditions.append("r.name = ?")
             params.append(rocket)
-        
+
         # Combine query parts
         if joins:
             query += " " + " ".join(joins)
         query += " WHERE " + " AND ".join(conditions)
         query += " GROUP BY l.launch_date ORDER BY l.launch_date"
-        
+
         cursor.execute(query, params)
         results = cursor.fetchall()
-        
+
         # Create continuous date range with all days
         date_counts = {row[0]: row[1] for row in results}
-        
+
         dates = []
         counts = []
         current = start_date
@@ -1258,15 +1278,15 @@ class LaunchDatabase:
             dates.append(current.strftime('%m-%d'))  # Format as MM-DD for display
             counts.append(date_counts.get(date_str, 0))
             current += timedelta(days=1)
-        
+
         return dates, counts
-    
+
     def get_launch_data_daily_by_month(self, year: int, start_month: int, num_months: int,
-                                        country: str = None, site: str = None, 
+                                        country: str = None, site: str = None,
                                         rocket: str = None) -> Tuple[List[str], List[int], str]:
         """
         Get daily launch counts for specified month range
-        
+
         Args:
             year: Year to get data for
             start_month: Starting month (1-12)
@@ -1274,34 +1294,34 @@ class LaunchDatabase:
             country: Optional country filter
             site: Optional launch site filter
             rocket: Optional rocket filter
-        
+
         Returns:
             tuple: (dates list as day numbers, counts list, date_range_string)
         """
         from datetime import timedelta
         import calendar
         cursor = self.conn.cursor()
-        
+
         # Calculate date range based on selected month and number of months
         start_date = datetime(year, start_month, 1)
-        
+
         # Calculate end date
         end_month = start_month + num_months - 1
         end_year = year
         if end_month > 12:
             end_month = end_month - 12
             end_year = year + 1
-        
+
         # Get last day of the end month
         last_day = calendar.monthrange(end_year, end_month)[1]
         end_date = datetime(end_year, end_month, last_day)
-        
+
         # Build query dynamically
         query = '''
             SELECT l.launch_date, COUNT(*) as count
             FROM launches l
         '''
-        
+
         joins = []
         conditions = [
             "l.launch_date >= ?",
@@ -1311,7 +1331,7 @@ class LaunchDatabase:
             start_date.strftime('%Y-%m-%d'),
             end_date.strftime('%Y-%m-%d')
         ]
-        
+
         # Add joins and conditions based on filters
         if country or site:
             joins.append("INNER JOIN launch_sites ls ON l.site_id = ls.site_id")
@@ -1321,24 +1341,24 @@ class LaunchDatabase:
             if site:
                 conditions.append("ls.location = ?")
                 params.append(site)
-        
+
         if rocket:
             joins.append("INNER JOIN rockets r ON l.rocket_id = r.rocket_id")
             conditions.append("r.name = ?")
             params.append(rocket)
-        
+
         # Combine query parts
         if joins:
             query += " " + " ".join(joins)
         query += " WHERE " + " AND ".join(conditions)
         query += " GROUP BY l.launch_date ORDER BY l.launch_date"
-        
+
         cursor.execute(query, params)
         results = cursor.fetchall()
-        
+
         # Create continuous date range with all days
         date_counts = {row[0]: row[1] for row in results}
-        
+
         dates = []
         counts = []
         current = start_date
@@ -1347,7 +1367,7 @@ class LaunchDatabase:
             dates.append(str(current.day))  # Just the day number
             counts.append(date_counts.get(date_str, 0))
             current += timedelta(days=1)
-        
+
         # Create date range string for display
         month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -1355,11 +1375,11 @@ class LaunchDatabase:
             date_range = f"{month_names[start_month-1]} {year}"
         else:
             date_range = f"{month_names[start_month-1]} - {month_names[end_month-1]} {year}"
-        
+
         return dates, counts, date_range
-    
+
     # ==================== RE-ENTRY OPERATIONS (NEW in v2.0) ====================
-    
+
     def add_reentry_site(self, site_data: Dict) -> int:
         """Add a new re-entry site"""
         cursor = self.conn.cursor()
@@ -1380,7 +1400,7 @@ class LaunchDatabase:
         ))
         self.conn.commit()
         return cursor.lastrowid
-    
+
     def add_reentry(self, reentry_data: Dict) -> int:
         """Add a new re-entry record"""
         cursor = self.conn.cursor()
@@ -1404,12 +1424,12 @@ class LaunchDatabase:
         ))
         self.conn.commit()
         return cursor.lastrowid
-    
+
     def get_reentries_by_month(self, year: int, month: int) -> List[Dict]:
         """Get all re-entries for a specific month"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT re.*, 
+            SELECT re.*,
                    rs.location, rs.drop_zone,
                    l.mission_name, l.payload_name,
                    st.status_name, st.status_color
@@ -1420,19 +1440,19 @@ class LaunchDatabase:
             WHERE strftime('%Y', re.reentry_date) = ? AND strftime('%m', re.reentry_date) = ?
             ORDER BY re.reentry_date, re.reentry_time
         ''', (str(year), f'{month:02d}'))
-        
+
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def get_all_reentry_sites(self) -> List[Dict]:
         """Get all re-entry sites from reentry_sites table"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT reentry_site_id as site_id, 
-                   location, 
+            SELECT reentry_site_id as site_id,
+                   location,
                    drop_zone as launch_pad,
                    drop_zone,
-                   latitude, 
-                   longitude, 
+                   latitude,
+                   longitude,
                    country,
                    zone_type,
                    turnaround_days,
@@ -1441,7 +1461,7 @@ class LaunchDatabase:
             ORDER BY country, location, drop_zone
         ''')
         return [dict(row) for row in cursor.fetchall()]
-    
+
     def update_reentry_site(self, site_id: int, site_data: Dict):
         """Update an existing re-entry site"""
         cursor = self.conn.cursor()
@@ -1466,13 +1486,13 @@ class LaunchDatabase:
             site_id
         ))
         self.conn.commit()
-    
+
     def delete_reentry_site(self, site_id: int):
         """Delete a re-entry site"""
         cursor = self.conn.cursor()
         cursor.execute('DELETE FROM reentry_sites WHERE reentry_site_id = ?', (site_id,))
         self.conn.commit()
-    
+
     def update_reentry(self, reentry_id: int, reentry_data: Dict):
         """Update an existing re-entry record"""
         cursor = self.conn.cursor()
@@ -1499,18 +1519,18 @@ class LaunchDatabase:
             reentry_id
         ))
         self.conn.commit()
-    
+
     def delete_reentry(self, reentry_id: int):
         """Delete a re-entry record"""
         cursor = self.conn.cursor()
         cursor.execute('DELETE FROM reentries WHERE reentry_id = ?', (reentry_id,))
         self.conn.commit()
-    
+
     def get_all_reentries(self) -> List[Dict]:
         """Get all re-entries"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT re.*, 
+            SELECT re.*,
                    rs.location, rs.drop_zone,
                    l.mission_name, l.payload_name,
                    st.status_name, st.status_color
@@ -1521,10 +1541,10 @@ class LaunchDatabase:
             ORDER BY re.reentry_date DESC, re.reentry_time DESC
         ''')
         return [dict(row) for row in cursor.fetchall()]
-    
+
     # ==================== SYNC OPERATIONS (NEW in v2.0) ====================
-    
-    def log_sync(self, data_source: str, records_added: int, records_updated: int, 
+
+    def log_sync(self, data_source: str, records_added: int, records_updated: int,
                  status: str, error_message: str = None):
         """Log a sync operation"""
         cursor = self.conn.cursor()
@@ -1533,7 +1553,7 @@ class LaunchDatabase:
             VALUES (?, ?, ?, ?, ?)
         ''', (data_source, records_added, records_updated, status, error_message))
         self.conn.commit()
-    
+
     def get_last_sync(self, data_source: str) -> Optional[Dict]:
         """Get last successful sync for a data source"""
         cursor = self.conn.cursor()
@@ -1543,19 +1563,21 @@ class LaunchDatabase:
             ORDER BY sync_time DESC
             LIMIT 1
         ''', (data_source,))
-        
+
         result = cursor.fetchone()
         return dict(result) if result else None
-    
+
     # ==================== UTILITY ====================
-    
+
     def close(self):
         """Close database connection"""
         self.conn.close()
-    
+
     def __del__(self):
         """Cleanup on deletion"""
         try:
             self.conn.close()
         except:
             pass
+
+```
