@@ -14,4 +14,4 @@ DATABASES = {
     }
 }
 
-INSTALLED_APPS = ("db",)
+INSTALLED_APPS = ("data.db",)
