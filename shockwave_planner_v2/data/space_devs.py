@@ -13,8 +13,13 @@ import json
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-from data.database import LaunchDatabase
+import logging
 
+# Data Models
+from data.db.models.launch import Launch
+from data.db.models.launch_site import LaunchSite
+from data.db.models.rocket import Rocket
+from data.db.models.launch_status import LaunchStatus
 
 class SpaceDevsAPI:
     """Interface to The Space Devs Launch Library API"""
@@ -22,17 +27,16 @@ class SpaceDevsAPI:
     BASE_URL = "https://lldev.thespacedevs.com/2.3.0/launches/"
     RATE_LIMIT_DELAY = 0.5  # seconds between requests
     
-    def __init__(self, db: LaunchDatabase):
+    def __init__(self):
         """Initialize API client"""
-        self.db = db
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'SHOCKWAVE PLANNER v2.0 - Remix Astronautics'
         })
     
-    def fetch_launches(self, params: Dict) -> List[Dict]:
+    def _fetch_launches(self, params: Dict) -> List[Dict]:
         """
-        Fetch launches from API with pagination
+        Fetch launches from API
         
         Args:
             params: Query parameters
@@ -42,64 +46,70 @@ class SpaceDevsAPI:
         """
         all_launches = []
         url = self.BASE_URL
-        first_page = True
-        page = 1
         
-        print(f"📡 Fetching launches from Space Devs API...")
+        logging.info(f"📡 Fetching launches from Space Devs API...")
+        logging.debug("start fetch")
         
-        while url:
-            try:
-                print(f"   Page {page}...", end=' ')
+        # while url:
+        try:           
+            # # Rate limiting (skip on first page)
+            # if not first_page:
+            #     time.sleep(self.RATE_LIMIT_DELAY)
+            
+            logging.debug("request being sent to: " + url)
+
+            # # Make request (params only on first page, then use 'next' URL)
+            # resp = self.session.get(
+            #     url, 
+            #     params=params if first_page else None,
+            #     timeout=30
+            # )
+
+            # Make request (params only on first page, then use 'next' URL)
+            resp = self.session.get(
+                url, 
+                params=params,
+                timeout=30
+            )
+            
+            logging.debug("got response: "+ str(resp))
+
+            # # Handle rate limiting - wait and retry ONCE
+            # if resp.status_code == 429:
+            #     print("⚠️  Rate limited! Waiting 60 seconds...")
+            #     time.sleep(60)
                 
-                # Rate limiting (skip on first page)
-                if not first_page:
-                    time.sleep(self.RATE_LIMIT_DELAY)
+            #     # Retry the request once
+            #     resp = self.session.get(
+            #         url,
+            #         params=params if first_page else None,
+            #         timeout=30
+            #     )
                 
-                # Make request (params only on first page, then use 'next' URL)
-                resp = self.session.get(
-                    url, 
-                    params=params if first_page else None,
-                    timeout=30
-                )
-                
-                # Handle rate limiting - wait and retry ONCE
-                if resp.status_code == 429:
-                    print("⚠️  Rate limited! Waiting 60 seconds...")
-                    time.sleep(60)
+            #     # If still rate limited, give up on this batch
+            #     if resp.status_code == 429:
+            #         print("❌ Still rate limited after retry. Stopping sync.")
+            #         print(f"   Got {len(all_launches)} launches before rate limit.")
                     
-                    # Retry the request once
-                    resp = self.session.get(
-                        url,
-                        params=params if first_page else None,
-                        timeout=30
-                    )
-                    
-                    # If still rate limited, give up on this batch
-                    if resp.status_code == 429:
-                        print("❌ Still rate limited after retry. Stopping sync.")
-                        print(f"   Got {len(all_launches)} launches before rate limit.")
-                        break
+            
+            if resp.status_code != 200:
+                print(f"❌ Error: HTTP {resp.status_code}")
                 
-                if resp.status_code != 200:
-                    print(f"❌ Error: HTTP {resp.status_code}")
-                    break
-                
-                data = resp.json()
-                results = data.get("results", [])
-                all_launches.extend(results)
-                
-                print(f"✓ ({len(results)} launches)")
-                
-                # Get next page URL from response
-                url = data.get("next")
-                first_page = False
-                page += 1
-                
-            except Exception as e:
-                print(f"❌ Error fetching page {page}: {e}")
-                break
-        
-        print(f"✅ Fetched {len(all_launches)} total launches")
+            data = resp.json()
+            results = data.get("results", [])
+            
+            all_launches.extend(results)
+            
+            print(f"✓ ({len(results)} launches)")
+            
+            # Get next page URL from response
+            # url = data.get("next")
+            # first_page = False
+            # page += 1
+            
+        except Exception as e:
+            print(f"❌ Error fetching: {e}")
+            
         return all_launches
     
     def fetch_upcoming_launches(self, limit: int = 100) -> List[Dict]:
@@ -115,7 +125,7 @@ class SpaceDevsAPI:
             "ordering": "net",
         }
         
-        return self.fetch_launches(params)
+        return self._fetch_launches(params)
     
     def fetch_previous_launches(self, limit: int = 100) -> List[Dict]:
         """Fetch previous launches from API - 3 years in the past"""
@@ -130,7 +140,7 @@ class SpaceDevsAPI:
             "ordering": "-net",  # Reverse chronological
         }
         
-        return self.fetch_launches(params)
+        return self._fetch_launches(params)
     
     def fetch_launches_by_date_range(self, start_date: str, end_date: str) -> List[Dict]:
         """Fetch launches within a date range"""
@@ -146,267 +156,275 @@ class SpaceDevsAPI:
             "ordering": "net",
         }
         
-        return self.fetch_launches(params)
+        return self._fetch_launches(params)
     
-    def parse_launch_data(self, api_launch: Dict) -> Dict:
+    # FIXME properly handle data inputs
+    def _parse_launch_data(self, launch: Dict):
         """Parse Space Devs launch data into database format"""
-        
-        # Parse date/time
-        net = api_launch.get('net')  # No Earlier Than (ISO format)
-        window_start = api_launch.get('window_start')
-        window_end = api_launch.get('window_end')
-        
-        launch_date = None
-        launch_time = None
-        if net:
-            try:
-                dt = datetime.fromisoformat(net.replace('Z', '+00:00'))
-                launch_date = dt.strftime('%Y-%m-%d')
-                launch_time = dt.strftime('%H:%M:%S')
-            except:
-                pass
-        
-        # Parse pad location
-        pad = api_launch.get('pad', {})
-        location = pad.get('location', {})
-        
-        site_name_raw = location.get('name', 'Unknown')
-        pad_name_raw = pad.get('name', 'Unknown')
-        latitude = location.get('latitude')
-        longitude = location.get('longitude')
-        country_code = location.get('country_code', '')
-        
-        # Clean up pad name - remove location suffix if present
-        # Example: "Space Launch Complex 40, Cape Canaveral SFS, FL, USA" -> "SLC-40"
-        pad_name = pad_name_raw
-        if ',' in pad_name_raw:
-            # Take only the first part before the comma
-            pad_name = pad_name_raw.split(',')[0].strip()
-        
-        # Shorten pad name
-        pad_name = pad_name.replace("Space Launch Complex", "SLC")
-        pad_name = pad_name.replace("Launch Complex", "LC")
-        pad_name = pad_name.replace("Launch Area", "LA")
-        pad_name = pad_name.replace("Launch Pad", "LP")
-        
-        # Clean up location name - remove country code suffix if present
-        # Example: "Cape Canaveral Space Force Station, FL, USA" -> "Cape Canaveral SFS, FL"
-        site_name = site_name_raw
-        if country_code and site_name_raw.endswith(f", {country_code}"):
-            # Remove ", USA" or ", CHN" etc from the end
-            site_name = site_name_raw[:-len(country_code)-2].strip()
-        
-        # Further cleanup: shorten common long names
-        site_name = site_name.replace("Space Force Station", "SFS")
-        site_name = site_name.replace("Air Force Base", "AFB")
-        site_name = site_name.replace("Rocket Launch Site", "RLS")
-        
-        # Parse rocket
-        rocket = api_launch.get('rocket', {})
-        configuration = rocket.get('configuration', {})
-        
-        rocket_name = configuration.get('full_name') or configuration.get('name', 'Unknown')
-        rocket_family = configuration.get('family', '')
-        rocket_variant = configuration.get('variant', '')
-        rocket_manufacturer = configuration.get('manufacturer', {}).get('name', '') if configuration.get('manufacturer') else ''
-        
-        # Get country from manufacturer if available
-        rocket_country = ''
-        if configuration.get('manufacturer'):
-            manufacturer_country = configuration.get('manufacturer', {}).get('country_code', '')
-            if manufacturer_country:
-                rocket_country = manufacturer_country
-        
-        # Parse mission
-        mission = api_launch.get('mission', {})
-        mission_name = api_launch.get('name', 'Unknown Mission')
-        mission_description = mission.get('description', '')
-        orbit = mission.get('orbit', {})
-        orbit_name = orbit.get('abbrev') or orbit.get('name', '')
-        
-        # Parse status
-        status = api_launch.get('status', {})
-        status_name = status.get('name', 'Unknown')
-        status_abbr = status.get('abbrev', '')
-        
-        # Map Space Devs status to our status
-        # Space Devs uses these common statuses:
-        # - Go for Launch, Go, TBD, TBC (pre-launch)
-        # - Success, Launch Successful, Failure, Launch Failure, Partial Failure (post-launch)
-        # - Hold, In Flight (active)
-        status_mapping = {
-            'Go for Launch': 'Go for Launch',
-            'Go': 'Go for Launch',
-            'TBC': 'Scheduled',
-            'TBD': 'Scheduled',
-            'To Be Confirmed': 'Scheduled',
-            'To Be Determined': 'Scheduled',
-            'Success': 'Success',
-            'Launch Successful': 'Success',  # Space Devs uses this!
-            'Failure': 'Failure',
-            'Launch Failure': 'Failure',  # Space Devs uses this!
-            'Partial Failure': 'Partial Failure',
-            'In Flight': 'In Flight',
-            'Hold': 'Hold',
-            'On Hold': 'Hold',
-        }
-        mapped_status = status_mapping.get(status_name, 'Scheduled')
-        
-        # Log unmapped statuses for debugging
-        if status_name not in status_mapping and status_name != 'Unknown':
-            print(f"  ⚠ Unknown status from Space Devs: '{status_name}' - mapping to 'Scheduled'")
-        
-        # Determine success
-        success = None
-        if status_name == 'Success':
-            success = True
-        elif status_name in ['Failure', 'Partial Failure']:
-            success = False
-        
-        return {
-            'launch_date': launch_date,
-            'launch_time': launch_time,
-            'launch_window_start': window_start,
-            'launch_window_end': window_end,
-            'site_data': {
-                'location': site_name,
-                'launch_pad': pad_name,
-                'latitude': latitude,
-                'longitude': longitude,
-                'country': country_code,
-                'external_id': str(pad.get('id')) if pad.get('id') else None
-            },
-            'rocket_data': {
-                'name': rocket_name,
-                'family': rocket_family,
-                'variant': rocket_variant,
-                'manufacturer': rocket_manufacturer,
-                'country': rocket_country,
-                'external_id': str(configuration.get('id')) if configuration.get('id') else None
-            },
-            'mission_name': mission_name,
-            'payload_name': mission.get('name', ''),
-            'orbit_type': orbit_name,
-            'status_name': mapped_status,
-            'success': success,
-            'remarks': mission_description[:500] if mission_description else None,
-            'source_url': api_launch.get('url'),
-            'external_id': str(api_launch.get('id')) if api_launch.get('id') else None,
-            'data_source': 'SPACE_DEVS'
-        }
-    
-    def sync_launch_to_db(self, launch_data: Dict) -> Tuple[str, int]:
+        try:
+            # Parse Launch data
+            # Launch window - datetime 
+            window_start = launch['window_start']
+            window_end = launch['window_end']
+            
+            # launch date and launch time
+            net = launch['net']  # No Earlier Than (ISO format)
+            launch_date = None
+            launch_time = None
+            
+            if net is not None:
+                # extract date and time from datetime group
+                try:
+                    dt = datetime.fromisoformat(net.replace('Z', '+00:00'))
+                    launch_date = dt.strftime('%Y-%m-%d')
+                    launch_time = dt.strftime('%H:%M:%S')
+                except Exception as e:
+                    logging.error("Error parsing launch date/time: " + str(e))
+            
+            # source url for data
+            source_url = launch["url"]
+            last_update_time = launch["last_updated"].replace('Z', '+00:00')
+            last_updated = dt = datetime.fromisoformat(last_update_time)
+
+            # Space Devs id for launch
+            external_id = launch["id"]
+
+            # Parse Launch Site
+            # extract launch site data
+            launch_pad = dict(launch["pad"])
+            pad_location = dict(launch_pad['location'])
+            
+            # name of launch facility
+            site_name = str(pad_location.get('name', 'Unknown'))
+            # name of specific launch pad at facility
+            pad_name = str(launch_pad.get('name', 'Unknown'))
+            
+            # location of launch pad
+            latitude = pad_location['latitude']
+            longitude = pad_location['longitude']
+            country_code = pad_location["country"]["alpha_3_code"]
+            
+            # Clean up pad name - remove location suffix if present
+            # Example: "Space Launch Complex 40, Cape Canaveral SFS, FL, USA" -> "SLC-40"
+            if pad_name.find(",") != -1:
+                # Take only the first part before the comma
+                pad_name = pad_name.split(',')[0].strip()
+            
+            # Shorten pad name
+            pad_name = pad_name.replace("Space Launch Complex", "SLC")
+            pad_name = pad_name.replace("Launch Complex", "LC")
+            pad_name = pad_name.replace("Launch Area", "LA")
+            pad_name = pad_name.replace("Launch Pad", "LP")
+            
+            # TODO FIX -> need to find first comma and remove everything afterwards
+            # Clean up location name - remove country code suffix if present
+            # Example: "Cape Canaveral Space Force Station, FL, USA" -> "Cape Canaveral SFS, FL"
+            if country_code and site_name.endswith(f", {country_code}"):
+                # Remove ", USA" or ", CHN" etc from the end
+                site_name = site_name[:-len(country_code)-2].strip()
+            
+            # Further cleanup: shorten common long names
+            site_name = site_name.replace("Space Force Station", "SFS")
+            site_name = site_name.replace("Air Force Base", "AFB")
+            site_name = site_name.replace("Rocket Launch Site", "RLS")
+            
+            # extract rocket data
+            rocket = launch['rocket']
+            configuration = rocket['configuration']
+            
+            logging.debug("full_name: "+ str(configuration['full_name']) + " external_id: "+ str(rocket["id"]))
+            rocket_name = configuration.get('full_name') or configuration.get('name', 'Unknown')
+            # # TODO handle rocket family
+            # rocket_family = configuration['families']
+            rocket_family = "TODO: IMPLEMENT"
+            rocket_variant = configuration['variant']
+            rocket_manufacturer = configuration['manufacturer']['name']
+            rocket_country = configuration['manufacturer']['country'][0]['name']
+            rocket_min_stages = configuration["min_stage"]
+            rocket_height = configuration["length"]
+            rocket_diameter = configuration["diameter"]
+            rocket_payload_leo = configuration["leo_capacity"]
+            rocket_payload_gto = configuration["gto_capacity"]
+            rocket_payload_sso = configuration["sso_capacity"]
+            rocket_mass = configuration["launch_mass"]
+
+            # extract mission data
+            mission = launch['mission']
+            mission_name = mission["name"]
+            mission_description = mission['description']
+            orbit = mission['orbit']
+            orbit_name = orbit['abbrev']
+            
+            # Parse status
+            status = launch.get('status', {})
+            status_name = status.get('name', 'Unknown')
+            status_abbr = status.get('abbrev', '')
+            
+            # Map Space Devs status to our status
+            # Space Devs uses these common statuses:
+            # - Go for Launch, Go, TBD, TBC (pre-launch)
+            # - Success, Launch Successful, Failure, Launch Failure, Partial Failure (post-launch)
+            # - Hold, In Flight (active)
+            status_mapping = {
+                'Go for Launch': 'Go for Launch',
+                'Go': 'Go for Launch',
+                'TBC': 'Scheduled',
+                'TBD': 'Scheduled',
+                'To Be Confirmed': 'Scheduled',
+                'To Be Determined': 'Scheduled',
+                'Success': 'Success',
+                'Launch Successful': 'Success',  # Space Devs uses this!
+                'Failure': 'Failure',
+                'Launch Failure': 'Failure',  # Space Devs uses this!
+                'Partial Failure': 'Partial Failure',
+                'In Flight': 'In Flight',
+                'Hold': 'Hold',
+                'On Hold': 'Hold',
+            }
+            mapped_status = status_mapping.get(status_name, 'Scheduled')
+            
+            # Log unmapped statuses for debugging
+            if status_name not in status_mapping and status_name != 'Unknown':
+                logging.error(f"  ⚠ Unknown status from Space Devs: '{status_name}' - mapping to 'Scheduled'")
+            
+            # Determine success
+            success = None
+            if status_name == 'Success':
+                success = True
+            elif status_name in ['Failure', 'Partial Failure']:
+                success = False
+            
+            return {
+                "launch_data": {
+                    'launch_date': launch_date,
+                    'launch_time': launch_time,
+                    'launch_window_start': window_start,
+                    'launch_window_end': window_end,
+                    'mission_name': mission_name,
+                    'payload_name': mission_name,
+                    'orbit_type': orbit_name,
+                    'status_name': mapped_status,
+                    'status_abbr': status_abbr,
+                    'success': success,
+                    'remarks': mission_description,
+                    'source_url': source_url,
+                    'external_id': external_id,
+                    'data_source': 'SPACE_DEVS',
+                    'last_updated': last_updated
+                },
+                'site_data': {
+                    'name': site_name,
+                    'launch_pad': pad_name,
+                    'latitude': latitude,
+                    'longitude': longitude,
+                    'country': country_code,
+                    'external_id': launch_pad["id"]
+                },
+                'rocket_data': {
+                    'name': rocket_name,
+                    'family': rocket_family,
+                    'variant': rocket_variant,
+                    'manufacturer': rocket_manufacturer,
+                    'country': rocket_country,
+                    'payload_leo': rocket_payload_leo,
+                    "payload_gto": rocket_payload_gto,
+                    "payload_sso": rocket_payload_sso,
+                    "height": rocket_height,
+                    "diameter": rocket_diameter,
+                    "mass": rocket_mass,
+                    "stages": rocket_min_stages,
+                    'external_id': rocket["id"]
+                }
+            }
+        except Exception as e:
+            logging.error("Error parsing launch: " + str(e.__traceback__))
+
+    def _sync_launch_to_db(self, parsed_data: Dict):
         """
         Sync a parsed launch to the database
         Returns: (action, launch_id) where action is 'added', 'updated', or 'skipped'
         """
-        
-        # Ensure external_id is string
-        external_id = str(launch_data.get('external_id', ''))
-        if not external_id:
-            print(f"  ⚠ Warning: Launch has no external_id, skipping")
+
+        launch_data = parsed_data["launch_data"]
+        site_data = parsed_data["site_data"]
+        rocket_data = parsed_data["rocket_data"]
+
+        # Update or create site
+        try:
+            # TODO: add suppport for multiple site_types
+            # TODO: add support for different turnaround days
+            site, _ = LaunchSite.objects.update_or_create(
+                external_id=site_data["external_id"],
+                defaults=site_data
+            )
+
+        except Exception as e:
+            logging.error(f"  ⚠ Could not create LaunchSite: {e}")
             return ('skipped', 0)
         
-        # Check if launch already exists
-        existing = self.db.find_launch_by_external_id(external_id)
-        
-        # Find or create site
-        site_data = launch_data['site_data']
-        site_id = None
-        sites = self.db.get_all_sites()
-        for site in sites:
-            if (site.get('location') == site_data.get('location') and 
-                site.get('launch_pad') == site_data.get('launch_pad')):
-                site_id = site['site_id']
-                break
-        
-        if not site_id:
-            try:
-                site_id = self.db.add_site(site_data)
-            except Exception as e:
-                print(f"  ⚠ Warning: Could not create site: {e}")
-                return ('skipped', 0)
-        
-        # Find or create rocket with full details
-        rocket_data = launch_data['rocket_data']
-        rocket_id = None
-        rocket_external_id = str(rocket_data.get('external_id', '')) if rocket_data.get('external_id') else None
-        
-        # Try to find existing rocket by external_id
-        if rocket_external_id:
-            rockets = self.db.get_all_rockets()
-            for rocket in rockets:
-                if rocket.get('external_id') == rocket_external_id:
-                    rocket_id = rocket['rocket_id']
-                    # Update with latest data
-                    try:
-                        self.db.update_rocket(rocket_id, rocket_data)
-                    except:
-                        pass  # Update failed, but we have the ID
-                    break
-        
-        # If not found by external_id, try by name
-        if not rocket_id:
-            rockets = self.db.get_all_rockets()
-            for rocket in rockets:
-                if rocket.get('name') == rocket_data.get('name'):
-                    rocket_id = rocket['rocket_id']
-                    # Update with latest data
-                    try:
-                        self.db.update_rocket(rocket_id, rocket_data)
-                    except:
-                        pass
-                    break
-        
-        # If still not found, create new rocket with full data
-        if not rocket_id:
-            try:
-                rocket_id = self.db.add_rocket(rocket_data)
-            except Exception as e:
-                print(f"  ⚠ Warning: Could not create rocket: {e}")
-                return ('skipped', 0)
+        # Update or create rocket
+        # FIXME fails to add rockets due to NOT NULL constraint failing (payload_gto, mass)
+        try:
+            rocket, _ = Rocket.objects.update_or_create(
+                external_id=rocket_data["external_id"],
+                name=rocket_data["name"],               
+                defaults=rocket_data
+            )
+            logging.debug(f"created rocket: {rocket.name, rocket.external_id}")
+        except Exception as e:
+            logging.error(f"  ⚠ Could not create Rocket {rocket_data['name'], rocket_data['external_id'], launch_data['external_id']} : {e}")
+            return ('skipped', 0)
         
         # Find status
         status_name_mapped = launch_data['status_name']
-        status_id = self.db.find_status_by_name(status_name_mapped)
-        if not status_id:
+        
+        # status_id = self.db.find_status_by_name(status_name_mapped)
+        
+        status = LaunchStatus.objects.filter(name=status_name_mapped).first()
+
+        if status is None:
             print(f"  ⚠ Warning: Status '{status_name_mapped}' not found in database, defaulting to 'Scheduled'")
-            status_id = self.db.find_status_by_name('Scheduled')
-            if not status_id:
+            status = LaunchStatus.objects.filter(name="Scheduled").first()
+            if status is None:
                 status_id = 1  # Fallback to first status
-        
-        # Build database record - only include fields that exist in SHOCKWAVE schema
-        db_launch = {
-            'launch_date': launch_data.get('launch_date'),
-            'launch_time': launch_data.get('launch_time'),
-            'launch_window_start': launch_data.get('launch_window_start'),
-            'launch_window_end': launch_data.get('launch_window_end'),
-            'site_id': site_id,
-            'rocket_id': rocket_id,
-            'mission_name': launch_data.get('mission_name', '')[:200],  # Limit length
-            'payload_name': launch_data.get('payload_name', '')[:200],
-            'orbit_type': launch_data.get('orbit_type', '')[:50],
-            'status_id': status_id,
-            'success': launch_data.get('success'),
-            'remarks': launch_data.get('remarks', '')[:500] if launch_data.get('remarks') else None,
-            'source_url': launch_data.get('source_url', '')[:500],
-            'external_id': external_id,
-            'data_source': 'SPACE_DEVS'
-        }
-        
-        try:
-            if existing:
-                # Update existing launch
-                self.db.update_launch(existing['launch_id'], db_launch)
-                return ('updated', existing['launch_id'])
             else:
-                # Add new launch
-                launch_id = self.db.add_launch(db_launch)
-                return ('added', launch_id)
+                status_id = status.pk
+        else:
+            status_id = status.pk
+
+        # TODO add in missing inputs
+        try:                       
+            launch_input = {
+                'launch_date': launch_data['launch_date'],
+                'launch_time': launch_data['launch_time'],
+                'launch_window_start': launch_data['launch_window_start'],
+                'launch_window_end': launch_data['launch_window_end'],
+                'site_id': site.pk,
+                'rocket_id': rocket.pk,
+                'mission_name': launch_data['mission_name'],
+                'payload_name': launch_data['payload_name'],
+                "payload_mass": None,
+                'orbit_type': launch_data['orbit_type'],
+                "orbit_altitude": None,
+                "inclination": None,
+                'success': launch_data['success'],
+                "failure_reason": None,
+                'remarks': launch_data['remarks'],
+                'source_url': launch_data['source_url'],
+                'status_id': status_id,
+                'data_source': 'SPACE_DEVS',
+                'external_id': launch_data["external_id"],
+                'last_updated': launch_data["last_updated"]
+            }
+
+            launch, _ = Launch.objects.update_or_create(external_id=launch_data["external_id"], defaults=launch_input)
+
         except Exception as e:
-            print(f"  ✗ Error saving launch: {e}")
+            logging.error(f"  ✗ Error saving launch: {e}")
             return ('skipped', 0)
-    
+
+        return ('added', launch.pk)
+
     def sync_upcoming_launches(self, limit: int = 100) -> Dict:
         """
         Sync upcoming launches from Space Devs API
@@ -421,20 +439,20 @@ class SpaceDevsAPI:
         skipped = 0
         errors = []
         
-        for api_launch in api_launches:
+        for launch in api_launches:
             try:
-                launch_data = self.parse_launch_data(api_launch)
-                action, launch_id = self.sync_launch_to_db(launch_data)
+                launch_data = self._parse_launch_data(launch)
+                action, _ = self._sync_launch_to_db(launch_data)
                 
                 if action == 'added':
                     added += 1
-                    mission = launch_data.get('mission_name', 'Unknown')[:50]
-                    date = launch_data.get('launch_date', 'Unknown')
+                    mission = launch_data["launch_data"]['mission_name'][:50]
+                    date = launch_data["launch_data"]['launch_date']
                     print(f"  + Added: {mission} ({date})")
                 elif action == 'updated':
                     updated += 1
-                    mission = launch_data.get('mission_name', 'Unknown')[:50]
-                    date = launch_data.get('launch_date', 'Unknown')
+                    mission = launch_data['mission_name'][:50]
+                    date = launch_data['launch_date']
                     print(f"  * Updated: {mission} ({date})")
                 else:
                     skipped += 1
@@ -442,13 +460,13 @@ class SpaceDevsAPI:
             except Exception as e:
                 error_msg = str(e)[:100]
                 errors.append(error_msg)
-                print(f"  X Error: {error_msg}")
+                logging.error(f"  X Error: {error_msg}")
                 skipped += 1
         
-        # Log sync
-        status = 'SUCCESS' if not errors else 'PARTIAL'
-        error_msg = '; '.join(errors[:5]) if errors else None
-        self.db.log_sync('SPACE_DEVS_UPCOMING', added, updated, status, error_msg)
+        # # Log sync
+        # status = 'SUCCESS' if not errors else 'PARTIAL'
+        # error_msg = '; '.join(errors[:5]) if errors else None
+        # self.db.log_sync('SPACE_DEVS_UPCOMING', added, updated, status, error_msg)
         
         return {
             'added': added,
@@ -474,8 +492,8 @@ class SpaceDevsAPI:
         
         for api_launch in api_launches:
             try:
-                launch_data = self.parse_launch_data(api_launch)
-                action, launch_id = self.sync_launch_to_db(launch_data)
+                launch_data = self._parse_launch_data(api_launch)
+                action, launch_id = self._sync_launch_to_db(launch_data)
                 
                 if action == 'added':
                     added += 1
@@ -487,10 +505,10 @@ class SpaceDevsAPI:
             except Exception as e:
                 errors.append(str(e))
         
-        # Log sync
-        status = 'SUCCESS' if not errors else 'PARTIAL'
-        error_msg = '; '.join(errors[:5]) if errors else None
-        self.db.log_sync('SPACE_DEVS_RANGE', added, updated, status, error_msg)
+        # # Log sync
+        # status = 'SUCCESS' if not errors else 'PARTIAL'
+        # error_msg = '; '.join(errors[:5]) if errors else None
+        # self.db.log_sync('SPACE_DEVS_RANGE', added, updated, status, error_msg)
         
         return {
             'added': added,
@@ -513,8 +531,8 @@ class SpaceDevsAPI:
         
         for api_launch in api_launches:
             try:
-                launch_data = self.parse_launch_data(api_launch)
-                action, launch_id = self.sync_launch_to_db(launch_data)
+                launch_data = self._parse_launch_data(api_launch)
+                action, launch_id = self._sync_launch_to_db(launch_data)
                 
                 if action == 'added':
                     added += 1
@@ -807,10 +825,10 @@ class SpaceDevsAPI:
         print(f"Skipped: {skipped}")
         print(f"Errors:  {len(errors)}")
         
-        # Log sync
-        status = 'SUCCESS' if not errors else 'PARTIAL'
-        error_msg = '; '.join(errors[:10]) if errors else None
-        self.db.log_sync('SPACE_DEVS_ALL_ROCKETS', added, updated, status, error_msg)
+        # # Log sync
+        # status = 'SUCCESS' if not errors else 'PARTIAL'
+        # error_msg = '; '.join(errors[:10]) if errors else None
+        # self.db.log_sync('SPACE_DEVS_ALL_ROCKETS', added, updated, status, error_msg)
         
         return {
             'added': added,
@@ -818,81 +836,3 @@ class SpaceDevsAPI:
             'skipped': skipped,
             'errors': errors
         }
-
-
-# Standalone sync script
-if __name__ == '__main__':
-    import sys
-    
-    db = LaunchDatabase()
-    api = SpaceDevsAPI(db)
-    
-    print("=" * 60)
-    print("SHOCKWAVE PLANNER - Space Devs Sync Utility")
-    print("=" * 60)
-    print()
-    
-    if len(sys.argv) > 1:
-        if sys.argv[1] == 'upcoming':
-            limit = int(sys.argv[2]) if len(sys.argv) > 2 else 100
-            result = api.sync_upcoming_launches(limit=limit)
-        elif sys.argv[1] == 'previous':
-            limit = int(sys.argv[2]) if len(sys.argv) > 2 else 50
-            result = api.sync_previous_launches(limit=limit)
-        elif sys.argv[1] == 'full':
-            # Sync full 4-year range (3 years past + 1 year future)
-            result = api.sync_full_range()
-        elif sys.argv[1] == 'range':
-            if len(sys.argv) < 4:
-                print("Usage: python space_devs.py range START_DATE END_DATE")
-                print("Example: python space_devs.py range 2025-01-01 2025-12-31")
-                sys.exit(1)
-            start = sys.argv[2]
-            end = sys.argv[3]
-            result = api.sync_date_range(start, end)
-        elif sys.argv[1] == 'rockets':
-            # NEW: Sync all rockets from SpaceDevs
-            result = api.sync_all_rockets()
-        elif sys.argv[1] == 'update-rockets':
-            # NEW: Update existing rockets only
-            result = api.sync_rocket_details()
-        else:
-            print("Unknown command.")
-            print("Available commands:")
-            print("  upcoming [limit]  - Sync upcoming launches (1 year ahead)")
-            print("  previous [limit]  - Sync previous launches (3 years back)")
-            print("  full              - Sync full range (3 years back + 1 year ahead)")
-            print("  range START END   - Sync specific date range (YYYY-MM-DD)")
-            print("  rockets           - Sync ALL rockets from SpaceDevs (add new + update existing)")
-            print("  update-rockets    - Update existing rockets only (no new additions)")
-            sys.exit(1)
-    else:
-        # Default: sync upcoming
-        result = api.sync_upcoming_launches(limit=100)
-    
-    print()
-    print("=" * 60)
-    print("SYNC COMPLETE")
-    print("=" * 60)
-    
-    # Handle different result formats
-    if 'total_processed' in result:
-        # Launch sync results
-        print(f"Added:      {result['added']}")
-        print(f"Updated:    {result['updated']}")
-        print(f"Skipped:    {result['skipped']}")
-        print(f"Errors:     {len(result['errors'])}")
-        print(f"Processed:  {result['total_processed']}")
-    else:
-        # Rocket sync results (or other formats)
-        print(f"Added:      {result.get('added', 0)}")
-        print(f"Updated:    {result.get('updated', 0)}")
-        print(f"Skipped:    {result.get('skipped', 0)}")
-        print(f"Errors:     {len(result.get('errors', []))}")
-    
-    if result.get('errors'):
-        print("\nErrors:")
-        for error in result['errors'][:5]:
-            print(f"  - {error}")
-    
-    db.close()
