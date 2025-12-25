@@ -17,21 +17,9 @@ from datetime import datetime
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from data.database import LaunchDatabase
 from data.space_devs import SpaceDevsAPI
-from gui.timeline_view import TimelineView
-from gui.enhanced_list_view import EnhancedListView
-from gui.timeline_view_reentry import ReentryTimelineView
-from gui.reentry_dialog import ReentryDialog
-from gui.launch_sites_view import LaunchSitesView
-from gui.drop_zones_view import DropZonesView
-from gui.rockets_view import RocketsView
-from gui.reentry_vehicles_view import ReentryVehiclesView
-from gui.statistics_view import StatisticsView
-from gui.map_view import MapView
-
-
+from gui import *
+from data.space_devs_worker import SyncWorker
 
 
 class MainWindow(QMainWindow):
@@ -39,7 +27,6 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.db = LaunchDatabase()
         self.sync_worker = None
         self.init_ui()
     
@@ -55,7 +42,7 @@ class MainWindow(QMainWindow):
         
         new_launch_action = QAction('New Launch', self)
         new_launch_action.setShortcut('Ctrl+N')
-        new_launch_action.triggered.connect(self.new_launch)
+        # new_launch_action.triggered.connect(self.new_launch)
         file_menu.addAction(new_launch_action)
         
         file_menu.addSeparator()
@@ -79,27 +66,27 @@ class MainWindow(QMainWindow):
         sync_upcoming_action.triggered.connect(self.sync_upcoming_launches)
         data_menu.addAction(sync_upcoming_action)
         
-        sync_previous_action = QAction('Sync Previous Launches (Space Devs)', self)
-        sync_previous_action.triggered.connect(self.sync_previous_launches)
-        data_menu.addAction(sync_previous_action)
+        # sync_previous_action = QAction('Sync Previous Launches (Space Devs)', self)
+        # sync_previous_action.triggered.connect(self.sync_previous_launches)
+        # data_menu.addAction(sync_previous_action)
         
         data_menu.addSeparator()
         
-        sync_rockets_action = QAction('Sync Rocket Details (Space Devs)', self)
-        sync_rockets_action.triggered.connect(self.sync_rocket_details)
-        data_menu.addAction(sync_rockets_action)
+        # sync_rockets_action = QAction('Sync Rocket Details (Space Devs)', self)
+        # sync_rockets_action.triggered.connect(self.sync_rocket_details)
+        # data_menu.addAction(sync_rockets_action)
         
         data_menu.addSeparator()
         
-        sync_history_action = QAction('View Sync History', self)
-        sync_history_action.triggered.connect(self.show_sync_history)
-        data_menu.addAction(sync_history_action)
+        # sync_history_action = QAction('View Sync History', self)
+        # sync_history_action.triggered.connect(self.show_sync_history)
+        # data_menu.addAction(sync_history_action)
         
-        # Help menu
-        help_menu = menubar.addMenu('Help')
-        about_action = QAction('About', self)
-        about_action.triggered.connect(self.show_about)
-        help_menu.addAction(about_action)
+        # # Help menu
+        # help_menu = menubar.addMenu('Help')
+        # about_action = QAction('About', self)
+        # # about_action.triggered.connect(self.show_about)
+        # help_menu.addAction(about_action)
         
         # Central widget
         central_widget = QWidget()
@@ -110,65 +97,65 @@ class MainWindow(QMainWindow):
         # Tab widget
         self.tab_widget = QTabWidget()
         
-        # Master Activity Schedule - Launch
-        self.timeline_view = TimelineView(self.db)
-        self.timeline_view.launch_selected.connect(self.edit_launch)
-        self.tab_widget.addTab(self.timeline_view, "Master Activity Schedule - Launch")
+        # # Master Activity Schedule - Launch
+        # self.timeline_view = TimelineView()
+        # self.timeline_view.launch_selected.connect(self.edit_launch)
+        # self.tab_widget.addTab(self.timeline_view, "Master Activity Schedule - Launch")
         
-        # Master Activity Schedule - Re-entry  
-        self.reentry_timeline_view = ReentryTimelineView(self.db)
-        self.reentry_timeline_view.reentry_selected.connect(self.edit_reentry)
-        self.tab_widget.addTab(self.reentry_timeline_view, "Master Activity Schedule - Re-entry")
+        # # Master Activity Schedule - Re-entry  
+        # self.reentry_timeline_view = ReentryTimelineView()
+        # self.reentry_timeline_view.reentry_selected.connect(self.edit_reentry)
+        # self.tab_widget.addTab(self.reentry_timeline_view, "Master Activity Schedule - Re-entry")
         
         # Enhanced List view
-        self.list_view = EnhancedListView(self.db)
-        self.list_view.launch_selected.connect(self.edit_launch)
+        self.list_view = EnhancedListView()
+        # self.list_view.launch_selected.connect(self.edit_launch)
         self.tab_widget.addTab(self.list_view, "Launch List View")
         
-        # Launch Site Map view
-        self.map_view = MapView(self.db)
-        self.map_view.site_selected.connect(self.show_site_launches)
-        self.tab_widget.addTab(self.map_view, "Launch Site Map")
+        # # Launch Site Map view
+        # self.map_view = MapView()
+        # self.map_view.site_selected.connect(self.show_site_launches)
+        # self.tab_widget.addTab(self.map_view, "Launch Site Map")
         
-        # Statistics view
-        self.statistics_view = StatisticsView(self.db)
-        self.tab_widget.addTab(self.statistics_view, "Launch Statistics")
+        # # Statistics view
+        # self.statistics_view = StatisticsView()
+        # self.tab_widget.addTab(self.statistics_view, "Launch Statistics")
         
-        # Launch Sites view
-        self.sites_view = LaunchSitesView(self.db, parent=self)
-        self.tab_widget.addTab(self.sites_view, "Launch Sites")
+        # # Launch Sites view
+        # self.sites_view = LaunchSitesView(parent=self)
+        # self.tab_widget.addTab(self.sites_view, "Launch Sites")
         
-        # Drop Zones view
-        self.drop_zones_view = DropZonesView(self.db, parent=self)
-        self.tab_widget.addTab(self.drop_zones_view, "Drop Zones")
+        # # Drop Zones view
+        # self.drop_zones_view = DropZonesView(parent=self)
+        # self.tab_widget.addTab(self.drop_zones_view, "Drop Zones")
         
-        # Rockets view
-        self.rockets_view = RocketsView(self.db, parent=self)
-        self.tab_widget.addTab(self.rockets_view, "Launch Vehicles")
-        # Re-entry vehicle view
-        self.reentry_vehicles_tab = ReentryVehiclesView(self.db)
-        self.tab_widget.addTab(self.reentry_vehicles_tab, "Re-entry Vehicles")
+        # # Rockets view
+        # self.rockets_view = RocketsView(parent=self)
+        # self.tab_widget.addTab(self.rockets_view, "Launch Vehicles")
+        # # Re-entry vehicle view
+        # self.reentry_vehicles_tab = ReentryVehiclesView()
+        # self.tab_widget.addTab(self.reentry_vehicles_tab, "Re-entry Vehicles")
         
         main_layout.addWidget(self.tab_widget)
         
         # Action buttons
         button_layout = QHBoxLayout()
         
-        new_btn = QPushButton("+ New Launch")
-        new_btn.clicked.connect(self.new_launch)
-        button_layout.addWidget(new_btn)
+        # new_btn = QPushButton("+ New Launch")
+        # new_btn.clicked.connect(self.new_launch)
+        # button_layout.addWidget(new_btn)
         
-        new_reentry_btn = QPushButton("+ New Re-entry")
-        new_reentry_btn.clicked.connect(self.new_reentry)
-        button_layout.addWidget(new_reentry_btn)
+        # new_reentry_btn = QPushButton("+ New Re-entry")
+        # new_reentry_btn.clicked.connect(self.new_reentry)
+        # button_layout.addWidget(new_reentry_btn)
         
-        sync_btn = QPushButton("🔄 Sync Space Devs")
-        sync_btn.clicked.connect(self.sync_upcoming_launches)
-        button_layout.addWidget(sync_btn)
+        # sync_btn = QPushButton("🔄 Sync Space Devs")
+        # sync_btn.clicked.connect(self.sync_upcoming_launches)
+        # button_layout.addWidget(sync_btn)
         
-        refresh_btn = QPushButton("♻️ Refresh")
-        refresh_btn.clicked.connect(self.refresh_all)
-        button_layout.addWidget(refresh_btn)
+        # refresh_btn = QPushButton("♻️ Refresh")
+        # refresh_btn.clicked.connect(self.refresh_all)
+        # button_layout.addWidget(refresh_btn)
         
         button_layout.addStretch()
         
@@ -184,33 +171,33 @@ class MainWindow(QMainWindow):
         # Status bar
         self.statusBar().showMessage("Ready - SHOCKWAVE PLANNER v2.0")
     
-    def new_launch(self):
-        """Create new launch"""
-        dialog = LaunchEditorDialog(self.db, parent=self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.refresh_all()
-            self.statusBar().showMessage("Launch added successfully", 3000)
+    # def new_launch(self):
+    #     """Create new launch"""
+    #     dialog = LaunchEditorDialog(parent=self)
+    #     if dialog.exec() == QDialog.DialogCode.Accepted:
+    #         self.refresh_all()
+    #         self.statusBar().showMessage("Launch added successfully", 3000)
     
-    def new_reentry(self):
-        """Create new re-entry"""
-        dialog = ReentryDialog(self.db, parent=self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.refresh_all()
-            self.statusBar().showMessage("Re-entry added successfully", 3000)
+    # def new_reentry(self):
+    #     """Create new re-entry"""
+    #     dialog = ReentryDialog(parent=self)
+    #     if dialog.exec() == QDialog.DialogCode.Accepted:
+    #         self.refresh_all()
+    #         self.statusBar().showMessage("Re-entry added successfully", 3000)
     
-    def edit_launch(self, launch_id: int):
-        """Edit existing launch"""
-        dialog = LaunchEditorDialog(self.db, launch_id, parent=self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.refresh_all()
-            self.statusBar().showMessage("Launch updated successfully", 3000)
+    # def edit_launch(self, launch_id: int):
+    #     """Edit existing launch"""
+    #     dialog = LaunchEditorDialog(launch_id, parent=self)
+    #     if dialog.exec() == QDialog.DialogCode.Accepted:
+    #         self.refresh_all()
+    #         self.statusBar().showMessage("Launch updated successfully", 3000)
     
-    def edit_reentry(self, reentry_id: int):
-        """Edit existing re-entry"""
-        dialog = ReentryDialog(self.db, parent=self, reentry_id=reentry_id)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.refresh_all()
-            self.statusBar().showMessage("Re-entry updated successfully", 3000)
+    # def edit_reentry(self, reentry_id: int):
+    #     """Edit existing re-entry"""
+    #     dialog = ReentryDialog(parent=self, reentry_id=reentry_id)
+    #     if dialog.exec() == QDialog.DialogCode.Accepted:
+    #         self.refresh_all()
+    #         self.statusBar().showMessage("Re-entry updated successfully", 3000)
     
     def sync_upcoming_launches(self):
         """Sync upcoming launches from Space Devs"""
@@ -225,39 +212,39 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self.start_sync('upcoming', 100)
     
-    def sync_previous_launches(self):
-        """Sync previous launches from Space Devs"""
-        reply = QMessageBox.question(
-            self,
-            'Sync Previous Launches',
-            'Fetch previous launches from The Space Devs API?\n\n'
-            'This will download up to 50 recent previous launches for historical data.',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+    # def sync_previous_launches(self):
+    #     """Sync previous launches from Space Devs"""
+    #     reply = QMessageBox.question(
+    #         self,
+    #         'Sync Previous Launches',
+    #         'Fetch previous launches from The Space Devs API?\n\n'
+    #         'This will download up to 50 recent previous launches for historical data.',
+    #         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+    #     )
         
-        if reply == QMessageBox.StandardButton.Yes:
-            self.start_sync('previous', 50)
+    #     if reply == QMessageBox.StandardButton.Yes:
+    #         self.start_sync('previous', 50)
     
-    def sync_rocket_details(self):
-        """Sync rocket details from Space Devs"""
-        rockets_count = len(self.db.get_all_rockets())
+    # def sync_rocket_details(self):
+    #     """Sync rocket details from Space Devs"""
+    #     rockets_count = len(self.db.get_all_rockets())
         
-        reply = QMessageBox.question(
-            self,
-            'Sync Rocket Details',
-            f'Update rocket details from The Space Devs API?\n\n'
-            f'This will fetch family, variant, manufacturer, and country\n'
-            f'for {rockets_count} rockets in your database.\n\n'
-            f'Note: Only rockets synced from Space Devs can be updated.',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+    #     reply = QMessageBox.question(
+    #         self,
+    #         'Sync Rocket Details',
+    #         f'Update rocket details from The Space Devs API?\n\n'
+    #         f'This will fetch family, variant, manufacturer, and country\n'
+    #         f'for {rockets_count} rockets in your database.\n\n'
+    #         f'Note: Only rockets synced from Space Devs can be updated.',
+    #         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+    #     )
         
-        if reply == QMessageBox.StandardButton.Yes:
-            self.start_sync('rockets', 0)
+    #     if reply == QMessageBox.StandardButton.Yes:
+    #         self.start_sync('rockets', 0)
     
     def start_sync(self, sync_type: str, limit: int):
         """Start background sync"""
-        self.sync_worker = SyncWorker(self.db.db_path, sync_type, limit)
+        self.sync_worker = SyncWorker(sync_type=sync_type, limit=limit)
         self.sync_worker.finished.connect(self.sync_finished)
         self.sync_worker.progress.connect(lambda msg: self.statusBar().showMessage(msg))
         
@@ -290,86 +277,86 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage("Sync complete", 5000)
     
-    def show_sync_history(self):
-        """Show sync history"""
-        QMessageBox.information(
-            self,
-            "Sync History",
-            "Sync history viewer coming soon!\n\n"
-            "For now, check the sync_log table in the database directly."
-        )
+    # def show_sync_history(self):
+    #     """Show sync history"""
+    #     QMessageBox.information(
+    #         self,
+    #         "Sync History",
+    #         "Sync history viewer coming soon!\n\n"
+    #         "For now, check the sync_log table in the database directly."
+    #     )
     
-    def show_about(self):
-        """Show about dialog"""
-        QMessageBox.about(
-            self,
-            "About SHOCKWAVE PLANNER",
-            "<h2>SHOCKWAVE PLANNER v2.0</h2>"
-            "<p><b>Desktop Launch Operations Planning System</b></p>"
-            "<p>Created for Remix Astronautics</p>"
-            "<p>Built with Python & PyQt6</p>"
-            "<br>"
-            "<p><b>Features:</b></p>"
-            "<ul>"
-            "<li>Comprehensive launch tracking</li>"
-            "<li>Re-entry operations management</li>"
-            "<li>Space Devs API integration</li>"
-            "<li>Timeline visualization</li>"
-            "<li>NOTAM tracking</li>"
-            "</ul>"
-            "<br>"
-            "<p>Author: Remix Astronautics</p>"
-            "<p>December 2025</p>"
-        )
+    # def show_about(self):
+    #     """Show about dialog"""
+    #     QMessageBox.about(
+    #         self,
+    #         "About SHOCKWAVE PLANNER",
+    #         "<h2>SHOCKWAVE PLANNER v2.0</h2>"
+    #         "<p><b>Desktop Launch Operations Planning System</b></p>"
+    #         "<p>Created for Remix Astronautics</p>"
+    #         "<p>Built with Python & PyQt6</p>"
+    #         "<br>"
+    #         "<p><b>Features:</b></p>"
+    #         "<ul>"
+    #         "<li>Comprehensive launch tracking</li>"
+    #         "<li>Re-entry operations management</li>"
+    #         "<li>Space Devs API integration</li>"
+    #         "<li>Timeline visualization</li>"
+    #         "<li>NOTAM tracking</li>"
+    #         "</ul>"
+    #         "<br>"
+    #         "<p>Author: Remix Astronautics</p>"
+    #         "<p>December 2025</p>"
+    #     )
     
-    def show_site_launches(self, site_id: int):
-        """Show launches for selected site from map"""
-        # Get site info
-        sites = self.db.get_all_sites()
-        site = next((s for s in sites if s['site_id'] == site_id), None)
+    # def show_site_launches(self, site_id: int):
+    #     """Show launches for selected site from map"""
+    #     # Get site info
+    #     sites = self.db.get_all_sites()
+    #     site = next((s for s in sites if s['site_id'] == site_id), None)
         
-        if not site:
-            return
+    #     if not site:
+    #         return
         
-        # Get launches for this site in current map date range
-        start_date, end_date = self.map_view.get_date_range()
-        all_launches = self.db.get_launches_by_date_range(start_date, end_date)
-        site_launches = [l for l in all_launches if l.get('site_id') == site_id]
+    #     # Get launches for this site in current map date range
+    #     start_date, end_date = self.map_view.get_date_range()
+    #     all_launches = self.db.get_launches_by_date_range(start_date, end_date)
+    #     site_launches = [l for l in all_launches if l.get('site_id') == site_id]
         
-        # Show summary dialog
-        launch_list = "\n".join([
-            f"• {l.get('launch_date')} - {l.get('mission_name', 'Unknown')}"
-            for l in site_launches[:10]  # Show first 10
-        ])
+    #     # Show summary dialog
+    #     launch_list = "\n".join([
+    #         f"• {l.get('launch_date')} - {l.get('mission_name', 'Unknown')}"
+    #         for l in site_launches[:10]  # Show first 10
+    #     ])
         
-        more_text = f"\n... and {len(site_launches) - 10} more" if len(site_launches) > 10 else ""
+    #     more_text = f"\n... and {len(site_launches) - 10} more" if len(site_launches) > 10 else ""
         
-        QMessageBox.information(
-            self,
-            f"{site['location']} - {site['launch_pad']}",
-            f"<b>{len(site_launches)} launches</b> in selected period:<br><br>"
-            f"<pre>{launch_list}{more_text}</pre><br>"
-            f"<i>Tip: Use Launch List View with same date filter for full details</i>"
-        )
+    #     QMessageBox.information(
+    #         self,
+    #         f"{site['location']} - {site['launch_pad']}",
+    #         f"<b>{len(site_launches)} launches</b> in selected period:<br><br>"
+    #         f"<pre>{launch_list}{more_text}</pre><br>"
+    #         f"<i>Tip: Use Launch List View with same date filter for full details</i>"
+    #     )
     
     def refresh_all(self):
         """Refresh all views"""
         # Update all pad turnarounds from launch history
-        self.db.update_all_pad_turnarounds_from_history()
+        # self.db.update_all_pad_turnarounds_from_history()
         
-        self.timeline_view.update_timeline()
-        self.reentry_timeline_view.update_timeline()
+        # self.timeline_view.update_timeline()
+        # self.reentry_timeline_view.update_timeline()
         self.list_view.refresh()
-        self.map_view.refresh()
-        self.sites_view.refresh_table()
-        self.drop_zones_view.refresh_table()
-        self.rockets_view.refresh_table()
-        self.reentry_vehicles_tab.refresh_table()
-        self.statistics_view.refresh()
+        # self.map_view.refresh()
+        # self.sites_view.refresh_table()
+        # self.drop_zones_view.refresh_table()
+        # self.rockets_view.refresh_table()
+        # self.reentry_vehicles_tab.refresh_table()
+        # self.statistics_view.refresh()
         
         self.statusBar().showMessage("Refreshed", 2000)
     
-    def closeEvent(self, event):
-        """Handle window close"""
-        self.db.close()
-        event.accept()
+    # def closeEvent(self, event):
+    #     """Handle window close"""
+    #     self.db.close()
+    #     event.accept()

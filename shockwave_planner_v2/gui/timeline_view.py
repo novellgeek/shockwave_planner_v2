@@ -16,7 +16,7 @@ class TimelineView(QWidget):
     
     launch_selected = pyqtSignal(int)
     
-    def __init__(self, db):
+    def __init__(self):
         super().__init__()
         self.db = db
         self.current_year = datetime.now().year
