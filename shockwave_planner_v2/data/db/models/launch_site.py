@@ -7,7 +7,7 @@ class LaunchSite(models.Model):
     latitude = models.FloatField()
     country = models.TextField()
     site_type = models.TextField(default="LAUNCH")
-    external_id = models.TextField()
+    external_id = models.TextField(unique=True)
     turnaround_days = models.IntegerField(default=7)
 
     models.UniqueConstraint(
