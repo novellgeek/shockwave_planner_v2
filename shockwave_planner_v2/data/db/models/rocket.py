@@ -7,7 +7,7 @@ class Rocket(models.Model):
     manufacturer = models.TextField()
     country = models.TextField()
     payload_leo = models.FloatField()
-    paload_gto = models.FloatField()
+    payload_gto = models.FloatField()
     height = models.FloatField()
     diameter = models.FloatField()
     mass = models.FloatField()
