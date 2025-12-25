@@ -3,8 +3,8 @@ from django.db import models
 class LaunchSite(models.Model):
     name = models.TextField(null=False)
     launch_pad = models.TextField(null=False)
-    longitude = models.FloatField()
     latitude = models.FloatField()
+    longitude = models.FloatField()
     country = models.TextField()
     site_type = models.TextField(default="LAUNCH")
     external_id = models.TextField(unique=True)
