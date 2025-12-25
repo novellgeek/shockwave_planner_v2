@@ -31,42 +31,6 @@ from gui.reentry_vehicles_view import ReentryVehiclesView
 from gui.statistics_view import StatisticsView
 from gui.map_view import MapView
 
-class SyncWorker(QThread):
-    """Background worker for Space Devs sync"""
-    finished = pyqtSignal(dict)
-    progress = pyqtSignal(str)
-    
-    def __init__(self, db_path, sync_type='upcoming', limit=100):
-        super().__init__()
-        self.db_path = db_path
-        self.sync_type = sync_type
-        self.limit = limit
-    
-    def run(self):
-        try:
-            # Create a new database connection in this thread
-            db = LaunchDatabase(self.db_path)
-            api = SpaceDevsAPI(db)
-            
-            if self.sync_type == 'upcoming':
-                self.progress.emit("Fetching upcoming launches...")
-                result = api.sync_upcoming_launches(limit=self.limit)
-            elif self.sync_type == 'previous':
-                self.progress.emit("Fetching previous launches...")
-                result = api.sync_previous_launches(limit=self.limit)
-            elif self.sync_type == 'rockets':
-                self.progress.emit("Updating rocket details...")
-                result = api.sync_rocket_details()
-            else:
-                result = {'added': 0, 'updated': 0, 'errors': []}
-            
-            # Close the database connection
-            db.close()
-            
-            self.finished.emit(result)
-        except Exception as e:
-            self.finished.emit({'added': 0, 'updated': 0, 'errors': [str(e)]})
-
 
 class LaunchEditorDialog(QDialog):
     """Dialog for adding/editing launch records"""
