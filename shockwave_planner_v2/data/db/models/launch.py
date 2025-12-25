@@ -21,11 +21,11 @@ class Launch(models.Model):
     failure_reason = models.TextField(null = True)
     remarks = models.TextField(null = True)
     source_url = models.TextField(null = True)
-    last_updated = models.DateTimeField(null = True, auto_now_add=True)
+    last_updated = models.DateTimeField(null = True)
     notam_reference = models.TextField(null = True)
     data_source = models.TextField(null = True, default="MANUAL")
     external_id = models.TextField(null = True)
-    last_synced = models.DateTimeField(null = True)
+    last_synced = models.DateTimeField(null = True, auto_now_add=True)
 
     site = models.ForeignKey(LaunchSite, on_delete=models.CASCADE)
     rocket = models.ForeignKey(Rocket, on_delete=models.CASCADE)
