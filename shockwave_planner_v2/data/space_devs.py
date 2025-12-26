@@ -60,7 +60,13 @@ class SpaceDevsClient:
                 timeout=30
             )
             
-            url = resp.json()["next"]
+            data = resp.json()
+            results = data["results"]
+            launches.extend(results)
+
+            url = data["next"]
+            num_launches += params["limit"]
+            params["limit"] = 100 if (max_launches - num_launches) % 100 == 0 else (max_launches - num_launches) % 100
 
             while url is not None and num_launches < max_launches:
                 # Rate limiting
@@ -69,6 +75,7 @@ class SpaceDevsClient:
                 # Make request
                 resp = self.session.get(
                     url,
+                    params=params,
                     timeout=30
                 )
                 
@@ -99,7 +106,7 @@ class SpaceDevsClient:
                 launches.extend(results)
             
                 url = data["next"]
-                num_launches += 100
+                num_launches += params["limit"]
 
             logging.info(f"✓ ({len(launches)} launches)")
             return launches
