@@ -18,7 +18,7 @@ import sys
 import os
 
 from data.space_devs import SpaceDevsClient
-from gui import *
+from gui.enhanced_list_view import EnhancedListView
 from data.space_devs_worker import SyncWorker
 
 

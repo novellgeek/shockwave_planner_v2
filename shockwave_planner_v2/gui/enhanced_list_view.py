@@ -10,7 +10,7 @@ from PyQt6.QtGui import QColor
 from datetime import datetime, timedelta
 
 from data.db.models.launch import Launch
-
+from data.db.models.launch_notam import LaunchNotam
 
 class EnhancedListView(QWidget):
     """
@@ -126,7 +126,7 @@ class EnhancedListView(QWidget):
         layout.addWidget(self.status_label)
         
         self.setLayout(layout)
-        # self.load_launches()
+        self.load_launches()
     
     def get_date_range(self):
         """Get start and end dates based on current filter"""
@@ -173,16 +173,14 @@ class EnhancedListView(QWidget):
     #     self.custom_end = self.custom_end_date.date().toPyDate()
     #     self.load_launches()
     
-    def load_launches(self, launches=None): #TODO populate db first
+    def load_launches(self, launches=None):
         """Load launches into table"""
         if launches is None:
             # Get launches for current date range
             start_date, end_date = self.get_date_range()
                    
-            # launches = self.db.get_launches_by_date_range(start_date, end_date)
-            
             # get list of launches with launch-sites, rockets, launch_status order by datetime
-            launches = Launch.objects.filter(launch_date__range=(start_date, end_date))
+            launches = list(Launch.objects.filter(launch_date__range=(start_date, end_date)))
 
         self.launch_table.setRowCount(len(launches))
 
@@ -197,70 +195,62 @@ class EnhancedListView(QWidget):
             self.launch_table.setItem(row, 0, create_centered_item(launch.launch_date))
             
             # Time
-            time_str = launch.launch_datetime
+            time_str = str(launch.launch_date) + " " + str(launch.launch_time)
             self.launch_table.setItem(row, 1, create_centered_item(time_str))
             
-            
             # Country
-            self.launch_table.setItem(row, 2, create_centered_item(launch.get('country', '')))
+            self.launch_table.setItem(row, 2, create_centered_item(launch.site.country))
             
-        #     # Site
-        #     site_str = f"{launch.get('location', '')} {launch.get('launch_pad', '')}"
-        #     self.launch_table.setItem(row, 3, create_centered_item(site_str))
+            # Site
+            site_str = f"{launch.site.name} | {launch.site.launch_pad}"
+            self.launch_table.setItem(row, 3, create_centered_item(site_str))
             
-        #     # Rocket
-        #     self.launch_table.setItem(row, 4, create_centered_item(launch.get('rocket_name', '')))
+            # Rocket
+            self.launch_table.setItem(row, 4, create_centered_item(launch.rocket.name))
             
-        #     # Mission
-        #     self.launch_table.setItem(row, 5, create_centered_item(launch.get('mission_name', '')))
+            # Mission
+            self.launch_table.setItem(row, 5, create_centered_item(launch.mission_name))
             
-        #     # Payload
-        #     self.launch_table.setItem(row, 6, create_centered_item(launch.get('payload_name', '')))
+            # Payload
+            self.launch_table.setItem(row, 6, create_centered_item(launch.payload_name))
             
-        #     # Orbit
-        #     self.launch_table.setItem(row, 7, create_centered_item(launch.get('orbit_type', '')))
+            # Orbit
+            self.launch_table.setItem(row, 7, create_centered_item(launch.orbit_type))
             
-        #     # NOTAM
-        #     notam_data = self.db.conn.cursor().execute("""
-        #                                                 SELECT group_concat(ln.serial, ', ') AS tooltip 
-        #                                                 FROM launch_notam AS ln 
-        #                                                 WHERE ln.launch_id == ?;
-        #                                                """, 
-        #                                                (str(launch['launch_id']),)
-        #                                                )
-        #     notam_data = [dict(row) for row in notam_data.fetchall()]
-        #     notam_tooltip = notam_data[0]['tooltip']
+            # NOTAM
+            associated_notams = launch.notams.all()
+ 
+            notam_tooltip = ", ".join([notam.serial for notam in associated_notams])
             
-        #     notam_item = create_centered_item(notam_tooltip)
-        #     if notam_tooltip:
-        #         notam_item.setBackground(QColor(255, 255, 200))  # Light yellow highlight
-        #         notam_item.setText("✔")
+            notam_item = create_centered_item(notam_tooltip)
+            if notam_tooltip != "":
+                notam_item.setBackground(QColor(255, 255, 200))  # Light yellow highlight
+                notam_item.setText("✔")
                 
-        #         notam_item.setToolTip(notam_tooltip)
-        #     else:
-        #         notam_item.setText("X")
-        #     self.launch_table.setItem(row, 8, notam_item)
+                notam_item.setToolTip(notam_tooltip)
+            else:
+                notam_item.setText("X")
+            self.launch_table.setItem(row, 8, notam_item)
             
-        #     # Status
-        #     status_item = create_centered_item(launch.get('status_name', ''))
-        #     if launch.get('status_color'):
-        #         status_item.setBackground(QColor(launch['status_color']))
-        #     self.launch_table.setItem(row, 9, status_item)
+            # Status
+            status_item = create_centered_item(launch.status.name)
+            status_item.setBackground(QColor(launch.status.colour))
+            self.launch_table.setItem(row, 9, status_item)
             
-        #     # Store launch_id in first column
-        #     self.launch_table.item(row, 0).setData(Qt.ItemDataRole.UserRole, launch['launch_id'])
+            # Store launch_id in first column
+            self.launch_table.item(row, 0).setData(Qt.ItemDataRole.UserRole, launch.pk)
         
-        # # Update status
-        # filter_names = {
-        #     'previous_7': 'Previous 7 Days',
-        #     'previous_30': 'Previous 30 Days',
-        #     'current': 'Current (Today)',
-        #     'next_7': 'Next 7 Days',
-        #     'next_30': 'Next 30 Days',
-        #     'custom': 'Custom Range'
-        # }
-        # filter_name = filter_names.get(self.current_filter, 'All')
-        # self.status_label.setText(f"Showing {len(launches)} launches ({filter_name})")
+        # Update status
+        filter_names = {
+            'previous_7': 'Previous 7 Days',
+            'previous_30': 'Previous 30 Days',
+            'current': 'Current (Today)',
+            'next_7': 'Next 7 Days',
+            'next_30': 'Next 30 Days',
+            'custom': 'Custom Range'
+        }
+        filter_name = filter_names.get(self.current_filter, 'All')
+        self.status_label.setText(f"Showing {len(launches)} launches ({filter_name})")
     
     # def perform_search(self):
     #     """Search launches"""
