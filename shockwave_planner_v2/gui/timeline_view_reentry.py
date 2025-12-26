@@ -16,15 +16,18 @@ from PyQt6.QtGui import QColor, QFont
 from datetime import datetime
 import calendar
 
+# import data models
+from data.db.models.reentry import Reentry
+from data.db.models.reentry_site import ReentrySite
+
 
 class ReentryTimelineView(QWidget):
     """Gantt-chart style timeline showing re-entries across a month"""
     
     reentry_selected = pyqtSignal(int)
     
-    def __init__(self, db):
+    def __init__(self):
         super().__init__()
-        self.db = db
         self.current_year = datetime.now().year
         self.current_month = datetime.now().month
         self.show_only_active = True
@@ -77,6 +80,7 @@ class ReentryTimelineView(QWidget):
         
         return layout
     
+    # TODO optimise update_timeline
     def update_timeline(self):
         month_name = calendar.month_name[self.current_month]
         self.month_label.setText(f"{month_name} {self.current_year} - Re-entry Operations")
@@ -84,7 +88,9 @@ class ReentryTimelineView(QWidget):
         days_in_month = calendar.monthrange(self.current_year, self.current_month)[1]
         
         # Get re-entries for this month
-        reentries = self.db.get_reentries_by_month(self.current_year, self.current_month)
+        current_month_reentries = Reentry.objects.filter(reentry_date__year=self.current_year, 
+                                              reentry_date__month=self.current_month
+                                              )
         
         # Also get re-entries from the end of previous month for turnaround carry-over
         prev_year = self.current_year
@@ -92,48 +98,52 @@ class ReentryTimelineView(QWidget):
         if prev_month < 1:
             prev_month = 12
             prev_year -= 1
-        prev_month_reentries = self.db.get_reentries_by_month(prev_year, prev_month)
+        
+        prev_month_reentries = Reentry.objects.filter(reentry_date__year=self.current_year, 
+                                              reentry_date__month=self.current_month
+                                              )
         
         # Group re-entries by zone
         zone_reentries = {}
         zone_prev_reentries = {}  # Track previous month re-entries for turnaround
         
-        for reentry in reentries:
-            key = (reentry.get('location', 'Unknown'), reentry.get('drop_zone', 'Unknown'))
+        for reentry in current_month_reentries:
+            key = (reentry.site.name, reentry.site.drop_zone)
+            
             if key not in zone_reentries:
                 zone_reentries[key] = []
             zone_reentries[key].append(reentry)
         
         for reentry in prev_month_reentries:
-            key = (reentry.get('location', 'Unknown'), reentry.get('drop_zone', 'Unknown'))
+            key = (reentry.site.name, reentry.site.drop_zone)
+            
             if key not in zone_prev_reentries:
                 zone_prev_reentries[key] = []
             zone_prev_reentries[key].append(reentry)
         
         # Get all re-entry sites and group by country
-        # FIXED: Use get_all_reentry_sites() instead of get_all_sites()
-        all_sites = self.db.get_all_reentry_sites()
+        all_sites = ReentrySite.objects.all()
         country_zones_map = {}
         
         for zone in all_sites:
-            country = zone.get('country', 'Other')
+            country = zone.country
             if not country or country == '':
                 country = 'Other'
             
             if country not in country_zones_map:
                 country_zones_map[country] = []
             
-            zone_key = (zone['location'], zone.get('drop_zone', 'Unknown'))
+            zone_key = (zone.name, zone.drop_zone)
             has_reentries = zone_key in zone_reentries
             
             if has_reentries or not self.show_only_active:
                 country_zones_map[country].append({
                     'type': 'zone',
                     'country': country,
-                    'location': zone['location'],
-                    'drop_zone': zone.get('drop_zone', 'Unknown'),
-                    'site_id': zone['site_id'],
-                    'turnaround_days': zone.get('turnaround_days', self.zone_turnaround_days),
+                    'location': zone.name,
+                    'drop_zone': zone.drop_zone,
+                    'site_id': zone.pk,
+                    'turnaround_days': zone.turnaround_days,
                     'reentries': zone_reentries.get(zone_key, []),
                     'prev_month_reentries': zone_prev_reentries.get(zone_key, [])  # For turnaround carry-over
                 })
@@ -217,8 +227,8 @@ class ReentryTimelineView(QWidget):
                 # Vehicle components
                 components = set()
                 for reentry in row_data['reentries']:
-                    if reentry.get('vehicle_component'):
-                        components.add(reentry['vehicle_component'])
+                    if reentry.vehicle_component:
+                        components.add(reentry.vehicle_component)
                 
                 vehicle_item = QTableWidgetItem(", ".join(sorted(components)[:2]))
                 vehicle_item.setBackground(QColor(240, 240, 245))
@@ -232,32 +242,32 @@ class ReentryTimelineView(QWidget):
                     
                     # Find re-entries on this day
                     day_reentries = [r for r in row_data['reentries'] 
-                                    if datetime.strptime(r['reentry_date'], '%Y-%m-%d').day == col_day]
+                                    if r.reentry_date.day == col_day]
                     
                     if day_reentries:
                         reentry = day_reentries[0]
-                        status_color = reentry.get('status_color', '#FFFF00')
+                        status_color = reentry.status.colour
                         item.setBackground(QColor(status_color))
                         item.setText(str(len(day_reentries)))
                         item.setData(Qt.ItemDataRole.UserRole, {
                             'type': 'reentry',
-                            'reentry_id': reentry['reentry_id'],
+                            'reentry_id': reentry.pk,
                             'count': len(day_reentries)
                         })
                     else:
                         # Check for recovery period using zone-specific turnaround
                         in_recovery = False
-                        zone_turnaround = row_data.get('turnaround_days', self.zone_turnaround_days)
-                        
+                        zone_turnaround = row_data['turnaround_days']
+
                         # Check re-entries in current month
                         for reentry in row_data['reentries']:
-                            reentry_day = datetime.strptime(reentry['reentry_date'], '%Y-%m-%d').day
+                            reentry_day = reentry.reentry_date.day
                             if reentry_day < col_day <= reentry_day + zone_turnaround:
                                 in_recovery = True
                                 break
                         
                         # Check re-entries from previous month that might extend into current month
-                        if not in_recovery and row_data.get('prev_month_reentries'):
+                        if not in_recovery and row_data['prev_month_reentries']:
                             prev_year = self.current_year
                             prev_month = self.current_month - 1
                             if prev_month < 1:
@@ -267,7 +277,7 @@ class ReentryTimelineView(QWidget):
                             days_in_prev_month = calendar.monthrange(prev_year, prev_month)[1]
                             
                             for prev_reentry in row_data['prev_month_reentries']:
-                                prev_reentry_date = datetime.strptime(prev_reentry['reentry_date'], '%Y-%m-%d')
+                                prev_reentry_date = prev_reentry.reentry_date
                                 prev_reentry_day = prev_reentry_date.day
                                 
                                 # Calculate how many days into current month the recovery extends
@@ -296,7 +306,7 @@ class ReentryTimelineView(QWidget):
         if not data:
             return
         
-        if data.get('type') == 'group':
+        if data['type'] == 'group':
             country = data['country']
             if country in self.expanded_groups:
                 self.expanded_groups.remove(country)
@@ -304,7 +314,7 @@ class ReentryTimelineView(QWidget):
                 self.expanded_groups.add(country)
             self.update_timeline()
         
-        elif data.get('type') == 'reentry':
+        elif data['type'] == 'reentry':
             self.reentry_selected.emit(data['reentry_id'])
     
     def previous_month(self):

@@ -113,7 +113,7 @@ class TimelineView(QWidget):
             site_prev_launches[key].append(launch)
         
         # Get all sites and group by country
-        all_sites = LaunchSite.objects.filter(site_type='LAUNCH') 
+        all_sites = LaunchSite.objects.all()
         country_sites_map = {}
         
         for site in all_sites:
@@ -183,6 +183,7 @@ class TimelineView(QWidget):
         for col in range(3, 3 + days_in_month):
             self.timeline_table.setColumnWidth(col, 30)
         
+        # populate rows
         for row_idx, row_data in enumerate(rows):
             if row_data['type'] == 'group':
                 country = row_data['country']

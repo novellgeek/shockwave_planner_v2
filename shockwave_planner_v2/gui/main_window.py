@@ -23,6 +23,7 @@ from data.space_devs_worker import SyncWorker
 # import GUI elements
 from gui.enhanced_list_view import EnhancedListView
 from gui.timeline_view import TimelineView
+from gui.timeline_view_reentry import ReentryTimelineView
 
 class MainWindow(QMainWindow):
     """Main application window for SHOCKWAVE PLANNER v2.0"""
@@ -104,10 +105,10 @@ class MainWindow(QMainWindow):
         # self.timeline_view.launch_selected.connect(self.edit_launch) TODO
         self.tab_widget.addTab(self.timeline_view, "Master Activity Schedule - Launch")
         
-        # # Master Activity Schedule - Re-entry TODO 
-        # self.reentry_timeline_view = ReentryTimelineView()
+        # Master Activity Schedule - Re-entry TODO 
+        self.reentry_timeline_view = ReentryTimelineView()
         # self.reentry_timeline_view.reentry_selected.connect(self.edit_reentry)
-        # self.tab_widget.addTab(self.reentry_timeline_view, "Master Activity Schedule - Re-entry")
+        self.tab_widget.addTab(self.reentry_timeline_view, "Master Activity Schedule - Re-entry")
         
         # Enhanced List view
         self.list_view = EnhancedListView()

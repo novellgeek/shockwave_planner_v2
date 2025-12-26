@@ -1,17 +1,19 @@
 from django.db import models
 
-class LaunchSite(models.Model):
+class ReentrySite(models.Model):
     name = models.TextField(null=False)
-    launch_pad = models.TextField(null=False)
+    drop_zone = models.TextField(null=False)
     latitude = models.FloatField()
     longitude = models.FloatField()
     country = models.TextField()
-    site_type = models.TextField(default="LAUNCH")
+    zone_type = models.TextField()
     external_id = models.TextField(unique=True)
     turnaround_days = models.IntegerField(default=7)
 
     models.UniqueConstraint(
-        fields=["name","launch_pad"], 
-        name="unique_location_launchpad_combo",
-        violation_error_message="A Launch site can't have duplicate launch pads"
+        fields=["name","drop_zone"], 
+        name="unique_location_dropzone_combo",
+        violation_error_message="A Reentry site can't have duplicate drop zones"
         )
+
+
