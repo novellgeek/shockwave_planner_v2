@@ -13,4 +13,4 @@ class Rocket(models.Model):
     diameter = models.FloatField(null=True)
     mass = models.FloatField(null=True)
     stages = models.IntegerField(null=True)
-    external_id = models.TextField(null=True)
+    external_id = models.TextField(null=True, unique=True)

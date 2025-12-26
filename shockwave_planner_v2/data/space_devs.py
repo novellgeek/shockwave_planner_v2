@@ -49,7 +49,7 @@ class SpaceDevsClient:
             "ordering": "net",
         }
         
-        return self._fetch_launches(params, max_launches)
+        return self._fetch(self.BASE_URL, params, max_launches)
     
     def fetch_previous_launches(self, max_launches: int = 100) -> List[Dict]:
         """Fetch previous launches from API - 3 years in the past"""
@@ -64,7 +64,7 @@ class SpaceDevsClient:
             "ordering": "-net",  # Reverse chronological
         }
         
-        return self._fetch_launches(params, max_launches)
+        return self._fetch(self.BASE_URL, params, max_launches)
     
     def fetch_launches_by_date_range(self, start_date: str, end_date: str) -> List[Dict]:
         """Fetch launches within a date range"""
@@ -80,9 +80,9 @@ class SpaceDevsClient:
             "ordering": "net",
         }
         
-        return self._fetch_launches(params, float('inf'))
+        return self._fetch(self.BASE_URL, params)
     
-    def _fetch_launches(self, params: Dict, max_launches) -> List[Dict]:
+    def _fetch(self, url: str, params: Dict, max_results = float('inf')) -> List[Dict]:
         """
         Fetch launches from API
         
@@ -92,9 +92,8 @@ class SpaceDevsClient:
         Returns:
             List of launch dictionaries
         """
-        launches  = []
-        url = self.BASE_URL
-        num_launches = 0
+        results  = []
+        num_results = 0
 
         logging.info(f"📡 Fetching launches from Space Devs API...")
         
@@ -106,15 +105,15 @@ class SpaceDevsClient:
                 timeout=30
             )
             
-            data = resp.json()
-            results = data["results"]
-            launches.extend(results)
+            response_json = resp.json()
+            content = response_json["results"]
+            results.extend(content)
 
-            url = data["next"]
-            num_launches += params["limit"]
-            params["limit"] = 100 if (max_launches - num_launches) % 100 == 0 else (max_launches - num_launches) % 100
+            url = response_json["next"]
+            num_results += params["limit"]
+            params["limit"] = 100 if (max_results - num_results) % 100 == 0 else (max_results - num_results) % 100
 
-            while url is not None and num_launches < max_launches:
+            while url is not None and num_results < max_results:
                 # Rate limiting
                 time.sleep(self.RATE_LIMIT_DELAY)
             
@@ -147,15 +146,15 @@ class SpaceDevsClient:
                     logging.error(f"❌ Error: HTTP {resp.status_code}")
                     raise requests.HTTPError(response=resp)
 
-                data = resp.json()
-                results = data["results"]
-                launches.extend(results)
+                response_json = resp.json()
+                content = response_json["results"]
+                results.extend(content)
             
-                url = data["next"]
-                num_launches += params["limit"]
+                url = response_json["next"]
+                num_results += params["limit"]
 
-            logging.info(f"✓ ({len(launches)} launches)")
-            return launches
+            logging.info(f"✓ ({len(results)} launches)")
+            return results
             
         except Exception as e:
             logging.error(f"❌ Error fetching: {e}")
@@ -366,7 +365,6 @@ class SpaceDevsClient:
             return ('skipped', 0)
         
         # Update or create rocket
-        # FIXME fails to add rockets due to NOT NULL constraint failing (payload_gto, mass)
         try:
             rocket, _ = Rocket.objects.update_or_create(
                 external_id=rocket_data["external_id"],
@@ -636,12 +634,12 @@ class SpaceDevsClient:
         
         return all_results
     
-    def sync_rocket_details(self) -> dict: # FIXME
+    def sync_rocket_details(self) -> dict:
         """
         Update existing rockets with details from Space Devs
         Returns: {'updated': count, 'errors': [...]}
         """
-        print("🚀 Updating rocket details from Space Devs...")
+        logging.info("🚀 Updating rocket details from Space Devs...")
         
         # Get all rockets from database
         rockets = Rocket.objects.all()
@@ -649,8 +647,8 @@ class SpaceDevsClient:
         updated_count = 0
         errors = []
         
+        # TODO optimise -> reduce number of api calls made        
         for rocket in rockets:
-            rocket_id = rocket.pk
             external_id = rocket.external_id
             
             # Skip if no external_id - can't look it up
@@ -662,7 +660,7 @@ class SpaceDevsClient:
                 # Fetch rocket config from Space Devs
                 url = f"https://lldev.thespacedevs.com/2.3.0/config/launcher/{external_id}/"
                 
-                logging.info(f"   Fetching details for: {rocket.name}...", end=' ')
+                logging.info(f"   Fetching details for: {rocket.name}...")
                 
                 resp = self.session.get(url, timeout=30)
                 
@@ -761,8 +759,11 @@ class SpaceDevsClient:
         print("=" * 60)
         print()
         
+        url = "https://lldev.thespacedevs.com/2.3.0/launcher_configurations/"
+        params = {"limit": 100}
+
         # Fetch all rockets from API
-        api_rockets = self.fetch_all_rockets()
+        api_rockets = self._fetch(url, params=params)
         
         if not api_rockets:
             print("❌ No rockets fetched from API")
@@ -782,9 +783,9 @@ class SpaceDevsClient:
         
         for api_rocket in api_rockets:
             try:
-                external_id = str(api_rocket.get('id', ''))
+                external_id = str(api_rocket['id'])
                 
-                if not external_id:
+                if external_id != '':
                     skipped += 1
                     continue
                 
