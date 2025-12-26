@@ -24,6 +24,7 @@ from data.space_devs_worker import SyncWorker
 from gui.enhanced_list_view import EnhancedListView
 from gui.timeline_view import TimelineView
 from gui.timeline_view_reentry import ReentryTimelineView
+from gui.map_view import MapView
 
 class MainWindow(QMainWindow):
     """Main application window for SHOCKWAVE PLANNER v2.0"""
@@ -116,9 +117,9 @@ class MainWindow(QMainWindow):
         self.tab_widget.addTab(self.list_view, "Launch List View")
         
         # # Launch Site Map view TODO
-        # self.map_view = MapView()
+        self.map_view = MapView()
         # self.map_view.site_selected.connect(self.show_site_launches)
-        # self.tab_widget.addTab(self.map_view, "Launch Site Map")
+        self.tab_widget.addTab(self.map_view, "Launch Site Map")
         
         # # Statistics view TODO
         # self.statistics_view = StatisticsView()

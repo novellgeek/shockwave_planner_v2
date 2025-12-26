@@ -35,6 +35,10 @@ except ImportError:
 
 from datetime import datetime, timedelta
 
+# import data models
+from data.db.models.launch import Launch
+from data.db.models.launch_notam import LaunchNotam
+from data.db.models.launch_site import LaunchSite
 
 class NotamParser:
     """Parse NOTAM coordinate strings into lat/lon coordinates"""
@@ -117,6 +121,7 @@ class NotamParser:
         return (np.mean(lats), np.mean(lons))
 
 
+# FIXME
 class MapView(QWidget):
     """Interactive world map with launch selection and NOTAM visualization"""
     
@@ -313,19 +318,20 @@ class MapView(QWidget):
     def populate_launch_combo(self):
         """Populate launch selection dropdown"""
         start_date, end_date = self.get_date_range()
-        launches = self.db.get_launches_by_date_range(start_date, end_date)
         
+        launches = Launch.objects.filter(launch_date__range=(start_date, end_date))
+
         self.launch_combo.blockSignals(True)
         self.launch_combo.clear()
         self.launch_combo.addItem("-- All Launches --", None)
         
         for launch in launches:
-            date = launch.get('launch_date', 'Unknown')
-            mission = launch.get('mission_name', 'Unknown')
-            site = launch.get('location', 'Unknown')
+            date = launch.launch_date
+            mission = launch.mission_name
+            site = launch.site.name
             
             display = f"{date} - {mission} ({site})"
-            self.launch_combo.addItem(display, launch['launch_id'])
+            self.launch_combo.addItem(display, launch.pk)
         
         self.launch_combo.blockSignals(False)
     
@@ -338,8 +344,10 @@ class MapView(QWidget):
         else:
             # Get full launch details
             start_date, end_date = self.get_date_range()
-            launches = self.db.get_launches_by_date_range(start_date, end_date)
-            self.selected_launch = next((l for l in launches if l['launch_id'] == launch_id), None)
+            
+            launches = Launch.objects.filter(launch_date__range=(start_date, end_date))
+            
+            self.selected_launch = next((l for l in launches if l.pk == launch_id), None)
         
         self.update_map()
         
@@ -350,21 +358,21 @@ class MapView(QWidget):
         if not self.selected_launch:
             return
         
-        lat = self.selected_launch.get('latitude')
-        lon = self.selected_launch.get('longitude')
+        lat = self.selected_launch.site.latitude
+        lon = self.selected_launch.site.longitude
         
         if lat is None or lon is None:
             return
         
         # Get NOTAM coordinates if they exist
-        launch_id = self.selected_launch['launch_id']
+        launch_id = self.selected_launch.pk
         notam_coords = self.get_notam_coordinates(launch_id)
         
-        # Also check for custom NOTAM
-        if 'custom_notam' in self.selected_launch:
-            if notam_coords is None:
-                notam_coords = []
-            notam_coords.extend(self.selected_launch['custom_notam'])
+        # # Also check for custom NOTAM
+        # if 'custom_notam' in self.selected_launch:
+        #     if notam_coords is None:
+        #         notam_coords = []
+        #     notam_coords.extend(self.selected_launch['custom_notam'])
         
         # Get canvas aspect ratio (width / height)
         fig_width, fig_height = self.figure.get_size_inches()
@@ -420,12 +428,16 @@ class MapView(QWidget):
             lat_range = base_range * 2
             lon_range = lat_range * canvas_aspect
             
-            self.ax.set_extent([
-                lon - lon_range/2, 
-                lon + lon_range/2, 
-                lat - lat_range/2, 
-                lat + lat_range/2
-            ], crs=ccrs.PlateCarree() if CARTOPY_AVAILABLE else None)
+            if CARTOPY_AVAILABLE:
+                self.ax.set_extent([
+                    lon - lon_range/2, 
+                    lon + lon_range/2, 
+                    lat - lat_range/2, 
+                    lat + lat_range/2
+                ], crs=ccrs.PlateCarree())
+            else:
+                self.ax.set_xlim(lon - lon_range/2, lon + lon_range/2)
+                self.ax.set_ylim(lat - lat_range/2, lat + lat_range/2)
         
         self.canvas.draw_idle()
     
@@ -486,24 +498,16 @@ class MapView(QWidget):
             'inclination': inclination
         }
     
-    def get_notam_coordinates(self, launch_id):
-        """Get all NOTAM coordinates for a launch"""
-        cursor = self.db.conn.cursor()
-        cursor.execute("""
-            SELECT n.serial, n.notam_text
-            FROM launch_notam ln
-            JOIN notam n ON ln.serial = n.serial
-            WHERE ln.launch_id = ?
-        """, (launch_id,))
-        
-        notam_records = cursor.fetchall()
-        
+    def get_notam_coordinates(self, launch_id): # TODO
+        """Get all NOTAM coordinates for a launch"""       
+        notam_records = LaunchNotam.objects.filter(launch_id=launch_id)
+
         all_coords = []
-        for record in notam_records:
-            notam_text = record[1] if len(record) > 1 else record[0]
-            coordinates = NotamParser.parse_notam_area(notam_text)
-            if coordinates:
-                all_coords.extend(coordinates)
+        # for record in notam_records:
+        #     notam_text = record[1] if len(record) > 1 else record[0]
+        #     coordinates = NotamParser.parse_notam_area(notam_text)
+        #     if coordinates:
+        #         all_coords.extend(coordinates)
         
         return all_coords if all_coords else None
     
@@ -562,7 +566,7 @@ class MapView(QWidget):
         
         # Get launches for current date range
         start_date, end_date = self.get_date_range()
-        launches = self.db.get_launches_by_date_range(start_date, end_date)
+        launches = Launch.objects.filter(launch_date__range=(start_date, end_date))
         
         # Create map
         if CARTOPY_AVAILABLE:
@@ -640,7 +644,7 @@ class MapView(QWidget):
         site_activity = {}  # site_id -> launch_count
         
         for launch in launches:
-            site_id = launch.get('site_id')
+            site_id = launch.site.pk
             if site_id:
                 site_activity[site_id] = site_activity.get(site_id, 0) + 1
         
@@ -648,12 +652,12 @@ class MapView(QWidget):
         self.site_labels = {}
         
         # Get all sites
-        all_sites = self.db.get_all_sites()
+        all_sites = LaunchSite.objects.all()
         
         for site in all_sites:
-            lat = site.get('latitude')
-            lon = site.get('longitude')
-            site_id = site.get('site_id')
+            lat = site.latitude
+            lon = site.longitude
+            site_id = site.pk
             
             if lat is None or lon is None:
                 continue
@@ -681,8 +685,8 @@ class MapView(QWidget):
             self.site_markers[site_id] = marker
             
             # Label (hidden by default)
-            location = site.get('location', 'Unknown')
-            pad = site.get('launch_pad', '')
+            location = site.name
+            pad = site.launch_pad
             label_text = f"{location}\n{pad}\n({count} launches)"
             
             label = self.ax.text(lon, lat + 0.5, label_text,
@@ -699,8 +703,8 @@ class MapView(QWidget):
         
         # Highlight selected launch site
         if self.selected_launch:
-            lat = self.selected_launch.get('latitude')
-            lon = self.selected_launch.get('longitude')
+            lat = self.selected_launch.site.latitude
+            lon = self.selected_launch.site.longitude
             
             if lat is not None and lon is not None:
                 # Highlight with red circle (filled)
@@ -710,7 +714,7 @@ class MapView(QWidget):
                            zorder=20)
                 
                 # Show label permanently for selected
-                site_id = self.selected_launch.get('site_id')
+                site_id = self.selected_launch.site.pk
                 if site_id in self.site_labels:
                     self.site_labels[site_id].set_visible(True)
                 
@@ -744,37 +748,30 @@ class MapView(QWidget):
         if not self.selected_launch:
             return
         
-        launch_id = self.selected_launch['launch_id']
-        launch_lat = self.selected_launch.get('latitude')
-        launch_lon = self.selected_launch.get('longitude')
+        launch_id = self.selected_launch.pk
+        launch_lat = self.selected_launch.site.latitude
+        launch_lon = self.selected_launch.site.longitude
         
         if launch_lat is None or launch_lon is None:
             return
         
-        # Get NOTAMs for this launch from database
-        cursor = self.db.conn.cursor()
-        cursor.execute("""
-            SELECT n.serial, n.notam_text
-            FROM launch_notam ln
-            JOIN notam n ON ln.serial = n.serial
-            WHERE ln.launch_id = ?
-        """, (launch_id,))
+        # Get NOTAMs for this launch from database       
+        notam_records = LaunchNotam.objects.filter(launch_id=launch_id)
         
-        notam_records = cursor.fetchall()
-        
-        # Parse and draw each NOTAM
-        for record in notam_records:
-            notam_text = record[1] if len(record) > 1 else record[0]
-            coordinates = NotamParser.parse_notam_area(notam_text)
+        # # Parse and draw each NOTAM
+        # # TODO implement notam
+        # for record in notam_records:
+        #     notam_text = record
+        #     coordinates = NotamParser.parse_notam_area(notam_text)
             
-            if coordinates:
-                self.draw_notam_polygon(coordinates, launch_lat, launch_lon)
+        #     if coordinates:
+        #         self.draw_notam_polygon(coordinates, launch_lat, launch_lon)
         
-        # Draw custom NOTAM if present
-        if 'custom_notam' in self.selected_launch:
-            coordinates = self.selected_launch['custom_notam']
-            self.draw_notam_polygon(coordinates, launch_lat, launch_lon, 
-                                   color='#ffdd00', alpha=0.4)
+        # # Draw custom NOTAM if present
+        # if 'custom_notam' in self.selected_launch:
+        #     coordinates = self.selected_launch['custom_notam']
+        #     self.draw_notam_polygon(coordinates, launch_lat, launch_lon, 
+        #                            color='#ffdd00', alpha=0.4)
     
     def draw_notam_polygon(self, coordinates, launch_lat, launch_lon, 
                           color='#ff3838', alpha=0.3):
@@ -865,7 +862,7 @@ class MapView(QWidget):
                     hover_found = True
             else:
                 # Hide label (unless it's the selected launch)
-                if self.selected_launch and site_id == self.selected_launch.get('site_id'):
+                if self.selected_launch and site_id == self.selected_launch.site.pk:
                     continue  # Keep selected visible
                 if site_id in self.site_labels:
                     self.site_labels[site_id].set_visible(False)
