@@ -12,45 +12,45 @@ def init_db():
     django.setup()
 
     # Preload Launch Status
-    from data.db.models.launch_status import LaunchStatus
-    LaunchStatus.objects.bulk_create(
+    from data.db.models.status import Status
+    Status.objects.bulk_create(
         [
-            LaunchStatus(
+            Status(
                 name='Scheduled', 
                 abbr='SCH', 
                 colour='#FFFF00', 
                 description='Launch is scheduled'),
-            LaunchStatus(
+            Status(
                 name='Go for Launch', 
                 abbr='GO', 
                 colour='#00FF00', 
                 description='Cleared for launch'),
-            LaunchStatus(
+            Status(
                 name='Success', 
                 abbr='SUC', 
                 colour='#00AA00', 
                 description='Launch successful'),
-            LaunchStatus(
+            Status(
                 name='Failure', 
                 abbr='FAIL', 
                 colour='#FF0000', 
                 description='Launch failed'),
-            LaunchStatus(
+            Status(
                 name='Partial Failure', 
                 abbr='PF', 
                 colour='#FFA500', 
                 description='Partial failure'),
-            LaunchStatus(
+            Status(
                 name='Scrubbed', 
                 abbr='SCR', 
                 colour='#808080', 
                 description='Launch scrubbed'),
-            LaunchStatus(
+            Status(
                 name='Hold', 
                 abbr='HOLD', 
                 colour='#FFAA00', 
                 description='Launch on hold'),
-            LaunchStatus(
+            Status(
                 name='In Flight', 
                 abbr='FLT', 
                 colour='#00AAFF', 

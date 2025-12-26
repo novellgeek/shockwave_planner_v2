@@ -19,7 +19,7 @@ import logging
 from data.db.models.launch import Launch
 from data.db.models.launch_site import LaunchSite
 from data.db.models.rocket import Rocket
-from data.db.models.launch_status import LaunchStatus
+from data.db.models.status import Status
 
 class SpaceDevsClient:
     """Interface to The Space Devs Launch Library API"""
@@ -225,6 +225,8 @@ class SpaceDevsClient:
                 # Remove ", USA" or ", CHN" etc from the end
                 site_name = site_name[:-len(country_code)-2].strip()
             
+            site_name = site_name[:site_name.find(",")]
+
             # Further cleanup: shorten common long names
             site_name = site_name.replace("Space Force Station", "SFS")
             site_name = site_name.replace("Air Force Base", "AFB")
@@ -380,11 +382,11 @@ class SpaceDevsClient:
         
         # status_id = self.db.find_status_by_name(status_name_mapped)
         
-        status = LaunchStatus.objects.filter(name=status_name_mapped).first()
+        status = Status.objects.filter(name=status_name_mapped).first()
 
         if status is None:
             print(f"  ⚠ Warning: Status '{status_name_mapped}' not found in database, defaulting to 'Scheduled'")
-            status = LaunchStatus.objects.filter(name="Scheduled").first()
+            status = Status.objects.filter(name="Scheduled").first()
             if status is None:
                 status_id = 1  # Fallback to first status
             else:
@@ -765,13 +767,13 @@ class SpaceDevsClient:
         # Fetch all rockets from API
         api_rockets = self._fetch(url, params=params)
         
-        if not api_rockets:
-            print("❌ No rockets fetched from API")
+        if api_rockets == []:
+            logging.error("❌ No rockets fetched from API")
             return {'added': 0, 'updated': 0, 'skipped': 0, 'errors': ['No rockets fetched']}
         
         # Get existing rockets from database
-        existing_rockets = self.db.get_all_rockets()
-        existing_by_external_id = {r.get('external_id'): r for r in existing_rockets if r.get('external_id')}
+        existing_rockets = Rocket.objects.all()
+        existing_by_external_id = {r.external_id: r for r in existing_rockets if r.external_id is None}
         
         added = 0
         updated = 0

@@ -4,7 +4,7 @@ from django.db import models
 from .notam import Notam
 from .rocket import Rocket
 from .launch_site import LaunchSite
-from .launch_status import LaunchStatus
+from .status import Status
 
 class Launch(models.Model):
     launch_date = models.DateField()
@@ -29,7 +29,7 @@ class Launch(models.Model):
 
     site = models.ForeignKey(LaunchSite, on_delete=models.CASCADE)
     rocket = models.ForeignKey(Rocket, on_delete=models.CASCADE)
-    status = models.ForeignKey(LaunchStatus, on_delete=models.CASCADE)
+    status = models.ForeignKey(Status, on_delete=models.CASCADE)
     notams = models.ManyToManyField(Notam, through="LaunchNotam")
 
     @property
