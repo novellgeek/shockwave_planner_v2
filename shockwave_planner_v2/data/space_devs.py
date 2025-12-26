@@ -36,85 +36,6 @@ class SpaceDevsClient:
             'User-Agent': 'SHOCKWAVE PLANNER v2.0 - Remix Astronautics'
         })
     
-    def _fetch_launches(self, params: Dict, max_launches: int) -> List[Dict]:
-        """
-        Fetch launches from API
-        
-        Args:
-            params: Query parameters
-            
-        Returns:
-            List of launch dictionaries
-        """
-        launches  = []
-        url = self.BASE_URL
-        num_launches = 0
-
-        logging.info(f"📡 Fetching launches from Space Devs API...")
-        
-        try:           
-            # Make request (params only on first page, then use 'next' URL)
-            resp = self.session.get(
-                url, 
-                params=params,
-                timeout=30
-            )
-            
-            data = resp.json()
-            results = data["results"]
-            launches.extend(results)
-
-            url = data["next"]
-            num_launches += params["limit"]
-            params["limit"] = 100 if (max_launches - num_launches) % 100 == 0 else (max_launches - num_launches) % 100
-
-            while url is not None and num_launches < max_launches:
-                # Rate limiting
-                time.sleep(self.RATE_LIMIT_DELAY)
-            
-                # Make request
-                resp = self.session.get(
-                    url,
-                    params=params,
-                    timeout=30
-                )
-                
-                # # Handle rate limiting - wait and retry ONCE
-                # if resp.status_code == 429:
-                #     print("⚠️  Rate limited! Waiting 60 seconds...")
-                #     time.sleep(60)
-                    
-                #     # Retry the request once
-                #     resp = self.session.get(
-                #         url,
-                #         params=params if first_page else None,
-                #         timeout=30
-                #     )
-                    
-                #     # If still rate limited, give up on this batch
-                #     if resp.status_code == 429:
-                #         print("❌ Still rate limited after retry. Stopping sync.")
-                #         print(f"   Got {len(all_launches)} launches before rate limit.")
-                        
-                
-                if resp.status_code != 200:
-                    logging.error(f"❌ Error: HTTP {resp.status_code}")
-                    raise requests.HTTPError(response=resp)
-
-                data = resp.json()
-                results = data["results"]
-                launches.extend(results)
-            
-                url = data["next"]
-                num_launches += params["limit"]
-
-            logging.info(f"✓ ({len(launches)} launches)")
-            return launches
-            
-        except Exception as e:
-            logging.error(f"❌ Error fetching: {e}")
-            return []
-    
     def fetch_upcoming_launches(self, max_launches: int = 100) -> List[Dict]:
         """Fetch upcoming launches from API - 1 year in the future"""
         now = datetime.utcnow()
@@ -159,7 +80,86 @@ class SpaceDevsClient:
             "ordering": "net",
         }
         
-        return self._fetch_launches(params)
+        return self._fetch_launches(params, float('inf'))
+    
+    def _fetch_launches(self, params: Dict, max_launches) -> List[Dict]:
+        """
+        Fetch launches from API
+        
+        Args:
+            params: Query parameters
+            
+        Returns:
+            List of launch dictionaries
+        """
+        launches  = []
+        url = self.BASE_URL
+        num_launches = 0
+
+        logging.info(f"📡 Fetching launches from Space Devs API...")
+        
+        try:           
+            # Make request (params only on first page, then use 'next' URL)
+            resp = self.session.get(
+                url, 
+                params=params,
+                timeout=30
+            )
+            
+            data = resp.json()
+            results = data["results"]
+            launches.extend(results)
+
+            url = data["next"]
+            num_launches += params["limit"]
+            params["limit"] = 100 if (max_launches - num_launches) % 100 == 0 else (max_launches - num_launches) % 100
+
+            while url is not None and num_launches < max_launches:
+                # Rate limiting
+                time.sleep(self.RATE_LIMIT_DELAY)
+            
+                # Make request
+                resp = self.session.get(
+                    url,
+                    params=params,
+                    timeout=30
+                )
+                
+                # # TODO Handle rate limiting - wait and retry ONCE
+                # if resp.status_code == 429:
+                #     print("⚠️  Rate limited! Waiting 60 seconds...")
+                #     time.sleep(60)
+                    
+                #     # Retry the request once
+                #     resp = self.session.get(
+                #         url,
+                #         params=params if first_page else None,
+                #         timeout=30
+                #     )
+                    
+                #     # If still rate limited, give up on this batch
+                #     if resp.status_code == 429:
+                #         print("❌ Still rate limited after retry. Stopping sync.")
+                #         print(f"   Got {len(all_launches)} launches before rate limit.")
+                        
+                
+                if resp.status_code != 200:
+                    logging.error(f"❌ Error: HTTP {resp.status_code}")
+                    raise requests.HTTPError(response=resp)
+
+                data = resp.json()
+                results = data["results"]
+                launches.extend(results)
+            
+                url = data["next"]
+                num_launches += params["limit"]
+
+            logging.info(f"✓ ({len(launches)} launches)")
+            return launches
+            
+        except Exception as e:
+            logging.error(f"❌ Error fetching: {e}")
+            return []
     
     # FIXME properly handle data inputs
     def _parse_launch_data(self, launch: Dict):
@@ -340,6 +340,7 @@ class SpaceDevsClient:
             }
         except Exception as e:
             logging.error("Error parsing launch: " + str(e.__traceback__))
+            return {}
 
     def _sync_launch_to_db(self, parsed_data: Dict):
         """
@@ -452,8 +453,8 @@ class SpaceDevsClient:
                     print(f"  + Added: {mission} ({date})")
                 elif action == 'updated':
                     updated += 1
-                    mission = launch_data['mission_name'][:50]
-                    date = launch_data['launch_date']
+                    mission = launch_data["launch_data"]['mission_name'][:50]
+                    date = launch_data["launch_data"]['launch_date']
                     print(f"  * Updated: {mission} ({date})")
                 else:
                     skipped += 1
@@ -635,7 +636,7 @@ class SpaceDevsClient:
         
         return all_results
     
-    def sync_rocket_details(self) -> dict:
+    def sync_rocket_details(self) -> dict: # FIXME
         """
         Update existing rockets with details from Space Devs
         Returns: {'updated': count, 'errors': [...]}
@@ -643,49 +644,49 @@ class SpaceDevsClient:
         print("🚀 Updating rocket details from Space Devs...")
         
         # Get all rockets from database
-        rockets = self.db.get_all_rockets()
-        
+        rockets = Rocket.objects.all()
+
         updated_count = 0
         errors = []
         
         for rocket in rockets:
-            rocket_id = rocket['rocket_id']
-            external_id = rocket.get('external_id')
+            rocket_id = rocket.pk
+            external_id = rocket.external_id
             
             # Skip if no external_id - can't look it up
-            if not external_id:
-                print(f"   Skipping {rocket['name']} (no external_id)")
+            if external_id is None:
+                logging.warning(f"   Skipping {rocket.name} (no external_id)")
                 continue
             
             try:
                 # Fetch rocket config from Space Devs
-                url = f"https://ll.thespacedevs.com/2.3.0/config/launcher/{external_id}/"
+                url = f"https://lldev.thespacedevs.com/2.3.0/config/launcher/{external_id}/"
                 
-                print(f"   Fetching details for: {rocket['name']}...", end=' ')
+                logging.info(f"   Fetching details for: {rocket.name}...", end=' ')
                 
                 resp = self.session.get(url, timeout=30)
                 
                 if resp.status_code == 404:
-                    print("⚠️  Not found")
+                    logging.error(f"⚠️  {rocket.name} Not found")
                     continue
                 
                 if resp.status_code != 200:
-                    print(f"❌ HTTP {resp.status_code}")
+                    logging.error(f"❌ HTTP error: {resp.status_code}")
                     continue
                 
                 config = resp.json()
                 
                 # Extract details
                 rocket_data = {
-                    'name': config.get('full_name') or config.get('name', rocket['name']),
-                    'family': config.get('family', ''),
-                    'variant': config.get('variant', ''),
-                    'manufacturer': config.get('manufacturer', {}).get('name', '') if config.get('manufacturer') else '',
-                    'country': config.get('manufacturer', {}).get('country_code', '') if config.get('manufacturer') else '',
+                    'name': config.get('full_name') or config.get('name', 'Unknown'),
+                    'family': "TODO: IMPLEMENT",
+                    'variant': config['variant'],
+                    'manufacturer': config['manufacturer']['name'],
+                    'country': config['manufacturer']['country'][0]['name'],
                 }
                 
                 # Update rocket - PRESERVE MANUAL DATA (alternative_name, boosters, payload_sso, payload_tli)
-                self.db.update_rocket_preserve_manual(rocket_id, rocket_data)
+                rocket.objects.update(**rocket_data)
                 updated_count += 1
                 print("✓")
                 
@@ -693,18 +694,18 @@ class SpaceDevsClient:
                 time.sleep(self.RATE_LIMIT_DELAY)
                 
             except Exception as e:
-                error_msg = f"Error updating {rocket['name']}: {e}"
+                error_msg = f"Error updating {rocket.name}: {e}"
                 errors.append(error_msg)
-                print(f"❌ {e}")
+                logging.error(f"❌ {e}")
         
-        print(f"\n✅ Updated {updated_count} rockets")
+        logging.info(f"\n✅ Updated {updated_count} rockets")
         
         return {
             'updated': updated_count,
             'errors': errors
         }
     
-    def fetch_all_rockets(self) -> List[Dict]:
+    def fetch_all_rockets(self) -> List[Dict]: #FIXME
         """
         Fetch all launcher configurations from Space Devs API
         Returns: List of rocket configuration dictionaries
