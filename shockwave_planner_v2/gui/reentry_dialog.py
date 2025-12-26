@@ -15,9 +15,8 @@ from datetime import datetime
 class ReentryDialog(QDialog):
     """Dialog for adding/editing re-entry operations"""
     
-    def __init__(self, db, parent=None, reentry_id=None):
+    def __init__(self, parent=None, reentry_id=None):
         super().__init__(parent)
-        self.db = db
         self.reentry_id = reentry_id
         
         self.setWindowTitle("New Re-entry" if not reentry_id else "Edit Re-entry")

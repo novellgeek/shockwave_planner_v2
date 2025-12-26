@@ -123,9 +123,8 @@ class MapView(QWidget):
     launch_selected = pyqtSignal(int)  # Emits launch_id when selected
     site_selected = pyqtSignal(int)    # Emits site_id when clicked (for compatibility)
     
-    def __init__(self, db, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.db = db
         self.current_filter = 'next_30'
         self.custom_start = None
         self.custom_end = None
