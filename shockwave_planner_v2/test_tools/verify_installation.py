@@ -40,7 +40,7 @@ def test_modules():
         return False
     
     try:
-        from data.space_devs import SpaceDevsAPI
+        from data.space_devs import SpaceDevsClient
         print("  ✓ space_devs module")
     except Exception as e:
         print(f"  ✗ space_devs module: {e}")

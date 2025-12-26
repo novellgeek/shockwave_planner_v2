@@ -17,7 +17,7 @@ from datetime import datetime
 import sys
 import os
 
-from data.space_devs import SpaceDevsAPI
+from data.space_devs import SpaceDevsClient
 from gui import *
 from data.space_devs_worker import SyncWorker
 

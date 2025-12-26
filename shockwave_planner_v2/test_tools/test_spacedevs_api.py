@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from data.database import LaunchDatabase
-from data.space_devs import SpaceDevsAPI
+from data.space_devs import SpaceDevsClient
 
 def test_api():
     """Test Space Devs API connection"""
@@ -30,7 +30,7 @@ def test_api():
     
     # Create API client
     print("Creating API client...")
-    api = SpaceDevsAPI(db)
+    api = SpaceDevsClient(db)
     print("✓ API client created")
     print()
     

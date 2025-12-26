@@ -21,7 +21,7 @@ from data.db.models.launch_site import LaunchSite
 from data.db.models.rocket import Rocket
 from data.db.models.launch_status import LaunchStatus
 
-class SpaceDevsAPI:
+class SpaceDevsClient:
     """Interface to The Space Devs Launch Library API"""
     
     BASE_URL = "https://lldev.thespacedevs.com/2.3.0/launches/"

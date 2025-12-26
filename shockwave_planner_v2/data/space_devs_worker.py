@@ -1,5 +1,5 @@
 from PyQt6.QtCore import QThread, pyqtSignal
-from data.space_devs import SpaceDevsAPI
+from data.space_devs import SpaceDevsClient
 
 
 class SyncWorker(QThread):
@@ -15,7 +15,7 @@ class SyncWorker(QThread):
     
     def run(self):
         try:
-            api = SpaceDevsAPI()
+            api = SpaceDevsClient()
             
             if self.sync_type == 'upcoming':
                 self.progress.emit("Fetching upcoming launches...")
