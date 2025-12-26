@@ -52,7 +52,7 @@ class EnhancedListView(QWidget):
             "Custom Range..."
         ])
         self.date_range_combo.setCurrentIndex(2)  # Default to "Current"
-        # self.date_range_combo.currentIndexChanged.connect(self.on_date_range_changed)
+        self.date_range_combo.currentIndexChanged.connect(self.on_date_range_changed)
         date_range_layout.addWidget(self.date_range_combo)
         
         # Custom range inputs (hidden by default)
@@ -73,7 +73,7 @@ class EnhancedListView(QWidget):
         custom_layout.addWidget(self.custom_end_date)
         
         self.apply_custom_btn = QPushButton("Apply")
-        # self.apply_custom_btn.clicked.connect(self.apply_custom_range)
+        self.apply_custom_btn.clicked.connect(self.apply_custom_range)
         custom_layout.addWidget(self.apply_custom_btn)
         
         self.custom_range_widget.setLayout(custom_layout)
@@ -89,7 +89,7 @@ class EnhancedListView(QWidget):
         
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Search by mission, payload, rocket, or NOTAM...")
-        # self.search_edit.textChanged.connect(self.perform_search)
+        self.search_edit.textChanged.connect(self.perform_search)
         search_layout.addWidget(self.search_edit)
         
         filter_layout.addLayout(search_layout)
@@ -156,22 +156,22 @@ class EnhancedListView(QWidget):
         
         return start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d')
     
-    # def on_date_range_changed(self, index):
-    #     """Handle date range selection change"""
-    #     filters = ['previous_7', 'previous_30', 'current', 'next_7', 'next_30', 'custom']
-    #     self.current_filter = filters[index]
+    def on_date_range_changed(self, index):
+        """Handle date range selection change"""
+        filters = ['previous_7', 'previous_30', 'current', 'next_7', 'next_30', 'custom']
+        self.current_filter = filters[index]
         
-    #     # Show/hide custom range inputs
-    #     self.custom_range_widget.setVisible(self.current_filter == 'custom')
+        # Show/hide custom range inputs
+        self.custom_range_widget.setVisible(self.current_filter == 'custom')
         
-    #     if self.current_filter != 'custom':
-    #         self.load_launches()
+        if self.current_filter != 'custom':
+            self.load_launches()
     
-    # def apply_custom_range(self):
-    #     """Apply custom date range"""
-    #     self.custom_start = self.custom_start_date.date().toPyDate()
-    #     self.custom_end = self.custom_end_date.date().toPyDate()
-    #     self.load_launches()
+    def apply_custom_range(self):
+        """Apply custom date range"""
+        self.custom_start = self.custom_start_date.date().toPyDate()
+        self.custom_end = self.custom_end_date.date().toPyDate()
+        self.load_launches()
     
     def load_launches(self, launches=None):
         """Load launches into table"""
@@ -252,26 +252,27 @@ class EnhancedListView(QWidget):
         filter_name = filter_names.get(self.current_filter, 'All')
         self.status_label.setText(f"Showing {len(launches)} launches ({filter_name})")
     
-    # def perform_search(self):
-    #     """Search launches"""
-    #     search_term = self.search_edit.text()
-    #     if search_term:
-    #         # Get launches in current date range
-    #         start_date, end_date = self.get_date_range()
-    #         all_launches = self.db.get_launches_by_date_range(start_date, end_date)
+    def perform_search(self): #FIXME
+        """Search launches"""
+        search_term = self.search_edit.text()
+        if search_term:
+            # Get launches in current date range
+            start_date, end_date = self.get_date_range()
+            all_launches = list(Launch.objects.filter(launch_date__range=(start_date, end_date)))
             
-    #         # Filter by search term
-    #         search_lower = search_term.lower()
-    #         filtered = [l for l in all_launches if (
-    #             search_lower in l.get('mission_name', '').lower() or
-    #             search_lower in l.get('payload_name', '').lower() or
-    #             search_lower in l.get('rocket_name', '').lower() or
-    #             search_lower in l.get('notam_reference', '').lower()
-    #         )]
+            # Filter by search term
+            # TODO optimise search to use sql instead of iterating through all launches
+            search_lower = search_term.lower()
+            filtered = [l for l in all_launches if (
+                search_lower in l.mission_name.lower() or
+                search_lower in l.payload_name.lower() or
+                search_lower in l.rocket.name.lower() or
+                any([search_lower in notam.serial.lower() for notam in list(l.notams.all())])
+            )]
             
-    #         self.load_launches(filtered)
-    #     else:
-    #         self.load_launches()
+            self.load_launches(filtered)
+        else:
+            self.load_launches()
     
     def on_launch_double_clicked(self, row, col):
         """Handle double click on launch"""
