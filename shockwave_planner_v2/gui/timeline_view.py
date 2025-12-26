@@ -10,6 +10,9 @@ from PyQt6.QtGui import QColor, QFont
 from datetime import datetime
 import calendar
 
+# import data models
+from data.db.models.launch_site import LaunchSite
+from data.db.models.launch import Launch
 
 class TimelineView(QWidget):
     """Gantt-chart style timeline showing launches across a month"""
@@ -18,7 +21,6 @@ class TimelineView(QWidget):
     
     def __init__(self):
         super().__init__()
-        self.db = db
         self.current_year = datetime.now().year
         self.current_month = datetime.now().month
         self.show_only_active = True
@@ -71,63 +73,74 @@ class TimelineView(QWidget):
         
         return layout
     
+    # TODO optimise update_timeline
     def update_timeline(self):
         month_name = calendar.month_name[self.current_month]
         self.month_label.setText(f"{month_name} {self.current_year}")
         
         days_in_month = calendar.monthrange(self.current_year, self.current_month)[1]
-        launches = self.db.get_launches_by_month(self.current_year, self.current_month)
-        
+        current_month_launches = Launch.objects.filter(launch_date__year=self.current_year, 
+                                              launch_date__month=self.current_month
+                                              )
+
         # Also get launches from the end of previous month for turnaround carry-over
         prev_year = self.current_year
         prev_month = self.current_month - 1
         if prev_month < 1:
             prev_month = 12
             prev_year -= 1
-        prev_month_launches = self.db.get_launches_by_month(prev_year, prev_month)
         
+        prev_month_launches = Launch.objects.filter(launch_date__month=prev_year, 
+                                              launch_date__year=prev_month
+                                              )
+
         # Group launches by site
-        site_launches = {}
-        site_prev_launches = {}  # Track previous month launches for turnaround
+        site_launches = {(site["site__name"], site['site__launch_pad']):[] for site in current_month_launches.values("site__name", "site__launch_pad").distinct()}
+        site_prev_launches = {(site["site__name"], site['site__launch_pad']):[] for site in prev_month_launches.values("site__name", "site__launch_pad").distinct()}  # Track previous month launches for turnaround
         
-        for launch in launches:
-            key = (launch.get('location', ''), launch.get('launch_pad', ''))
+        for launch in current_month_launches:
+            key = (launch.site.name, launch.site.launch_pad)
+            
             if key not in site_launches:
                 site_launches[key] = []
             site_launches[key].append(launch)
         
         for launch in prev_month_launches:
-            key = (launch.get('location', ''), launch.get('launch_pad', ''))
+            key = (launch.site.name, launch.site.launch_pad)
+            
             if key not in site_prev_launches:
                 site_prev_launches[key] = []
             site_prev_launches[key].append(launch)
         
         # Get all sites and group by country
-        all_sites = self.db.get_all_sites(site_type='LAUNCH')
+        all_sites = LaunchSite.objects.filter(site_type='LAUNCH') 
         country_sites_map = {}
         
         for site in all_sites:
-            country = site.get('country', 'Other')
+            country = site.country
+            
             if not country or country == '':
                 country = 'Other'
             
             if country not in country_sites_map:
                 country_sites_map[country] = []
             
-            site_key = (site['location'], site['launch_pad'])
+            site_key = (site.name, site.launch_pad)
             has_launches = site_key in site_launches
             
             if has_launches or not self.show_only_active:
                 country_sites_map[country].append({
                     'type': 'site',
                     'country': country,
-                    'location': site['location'],
-                    'pad': site['launch_pad'],
-                    'site_id': site['site_id'],
-                    'turnaround_days': site.get('turnaround_days', self.pad_turnaround_days),
+                    'location': site.name,
+                    'pad': site.launch_pad,
+                    'site_id': site.pk,
+                    'turnaround_days': site.turnaround_days,
                     'launches': site_launches.get(site_key, []),
                     'prev_month_launches': site_prev_launches.get(site_key, [])  # For turnaround carry-over
-                })
+                    }
+                )
+        
         
         # Build rows for display
         rows = []
@@ -204,8 +217,8 @@ class TimelineView(QWidget):
                 
                 rockets = set()
                 for launch in row_data['launches']:
-                    if launch.get('rocket_name'):
-                        rockets.add(launch['rocket_name'])
+                    if launch.rocket.name:
+                        rockets.add(launch.rocket.name)
                 
                 rocket_item = QTableWidgetItem(", ".join(sorted(rockets)[:2]))
                 rocket_item.setBackground(QColor(240, 240, 245))
@@ -217,32 +230,32 @@ class TimelineView(QWidget):
                     item = QTableWidgetItem("")
                     
                     day_launches = [l for l in row_data['launches'] 
-                                   if datetime.strptime(l['launch_date'], '%Y-%m-%d').day == col_day]
+                                   if l.launch_date.day == col_day]
                     
                     if day_launches:
                         launch = day_launches[0]
-                        status_color = launch.get('status_color', '#FFFF00')
+                        status_color = launch.status.colour
                         item.setBackground(QColor(status_color))
                         item.setText(str(len(day_launches)))
                         item.setData(Qt.ItemDataRole.UserRole, {
                             'type': 'launch',
-                            'launch_id': launch['launch_id'],
+                            'launch_id': launch.pk,
                             'count': len(day_launches)
                         })
                     else:
                         # Check for turnaround period using site-specific turnaround
                         in_turnaround = False
-                        site_turnaround = row_data.get('turnaround_days', self.pad_turnaround_days)
+                        site_turnaround = row_data['turnaround_days']
                         
                         # Check launches in current month
                         for launch in row_data['launches']:
-                            launch_day = datetime.strptime(launch['launch_date'], '%Y-%m-%d').day
+                            launch_day = launch.launch_date.day
                             if launch_day < col_day <= launch_day + site_turnaround:
                                 in_turnaround = True
                                 break
                         
                         # Check launches from previous month that might extend into current month
-                        if not in_turnaround and row_data.get('prev_month_launches'):
+                        if not in_turnaround and row_data['prev_month_launches']:
                             prev_year = self.current_year
                             prev_month = self.current_month - 1
                             if prev_month < 1:
@@ -252,7 +265,7 @@ class TimelineView(QWidget):
                             days_in_prev_month = calendar.monthrange(prev_year, prev_month)[1]
                             
                             for prev_launch in row_data['prev_month_launches']:
-                                prev_launch_date = datetime.strptime(prev_launch['launch_date'], '%Y-%m-%d')
+                                prev_launch_date = prev_launch.launch_date
                                 prev_launch_day = prev_launch_date.day
                                 
                                 # Calculate how many days into current month the turnaround extends
@@ -281,7 +294,7 @@ class TimelineView(QWidget):
         if not data:
             return
         
-        if data.get('type') == 'group':
+        if data['type'] == 'group':
             country = data['country']
             if country in self.expanded_groups:
                 self.expanded_groups.remove(country)
@@ -289,7 +302,7 @@ class TimelineView(QWidget):
                 self.expanded_groups.add(country)
             self.update_timeline()
         
-        elif data.get('type') == 'launch':
+        elif data['type'] == 'launch':
             self.launch_selected.emit(data['launch_id'])
     
     def previous_month(self):
