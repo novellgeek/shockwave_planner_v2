@@ -25,8 +25,10 @@ class SpaceDevsClient:
     """Interface to The Space Devs Launch Library API"""
     
     BASE_URL = "https://lldev.thespacedevs.com/2.3.0/launches/"
-    RATE_LIMIT_DELAY = 0.5  # seconds between requests
     
+    REQ_PER_HOUR = 15
+    RATE_LIMIT_DELAY = 60/REQ_PER_HOUR  # seconds between requests
+
     def __init__(self):
         """Initialize API client"""
         self.session = requests.Session()
@@ -34,7 +36,7 @@ class SpaceDevsClient:
             'User-Agent': 'SHOCKWAVE PLANNER v2.0 - Remix Astronautics'
         })
     
-    def _fetch_launches(self, params: Dict) -> List[Dict]:
+    def _fetch_launches(self, params: Dict, max_launches: int) -> List[Dict]:
         """
         Fetch launches from API
         
@@ -44,27 +46,13 @@ class SpaceDevsClient:
         Returns:
             List of launch dictionaries
         """
-        all_launches = []
+        launches  = []
         url = self.BASE_URL
-        
+        num_launches = 0
+
         logging.info(f"📡 Fetching launches from Space Devs API...")
-        logging.debug("start fetch")
         
-        # while url:
         try:           
-            # # Rate limiting (skip on first page)
-            # if not first_page:
-            #     time.sleep(self.RATE_LIMIT_DELAY)
-            
-            logging.debug("request being sent to: " + url)
-
-            # # Make request (params only on first page, then use 'next' URL)
-            # resp = self.session.get(
-            #     url, 
-            #     params=params if first_page else None,
-            #     timeout=30
-            # )
-
             # Make request (params only on first page, then use 'next' URL)
             resp = self.session.get(
                 url, 
@@ -72,47 +60,55 @@ class SpaceDevsClient:
                 timeout=30
             )
             
-            logging.debug("got response: "+ str(resp))
+            url = resp.json()["next"]
 
-            # # Handle rate limiting - wait and retry ONCE
-            # if resp.status_code == 429:
-            #     print("⚠️  Rate limited! Waiting 60 seconds...")
-            #     time.sleep(60)
+            while url is not None and num_launches < max_launches:
+                # Rate limiting
+                time.sleep(self.RATE_LIMIT_DELAY)
+            
+                # Make request
+                resp = self.session.get(
+                    url,
+                    timeout=30
+                )
                 
-            #     # Retry the request once
-            #     resp = self.session.get(
-            #         url,
-            #         params=params if first_page else None,
-            #         timeout=30
-            #     )
-                
-            #     # If still rate limited, give up on this batch
-            #     if resp.status_code == 429:
-            #         print("❌ Still rate limited after retry. Stopping sync.")
-            #         print(f"   Got {len(all_launches)} launches before rate limit.")
+                # # Handle rate limiting - wait and retry ONCE
+                # if resp.status_code == 429:
+                #     print("⚠️  Rate limited! Waiting 60 seconds...")
+                #     time.sleep(60)
                     
-            
-            if resp.status_code != 200:
-                print(f"❌ Error: HTTP {resp.status_code}")
+                #     # Retry the request once
+                #     resp = self.session.get(
+                #         url,
+                #         params=params if first_page else None,
+                #         timeout=30
+                #     )
+                    
+                #     # If still rate limited, give up on this batch
+                #     if resp.status_code == 429:
+                #         print("❌ Still rate limited after retry. Stopping sync.")
+                #         print(f"   Got {len(all_launches)} launches before rate limit.")
+                        
                 
-            data = resp.json()
-            results = data.get("results", [])
+                if resp.status_code != 200:
+                    logging.error(f"❌ Error: HTTP {resp.status_code}")
+                    raise requests.HTTPError(response=resp)
+
+                data = resp.json()
+                results = data["results"]
+                launches.extend(results)
             
-            all_launches.extend(results)
-            
-            print(f"✓ ({len(results)} launches)")
-            
-            # Get next page URL from response
-            # url = data.get("next")
-            # first_page = False
-            # page += 1
+                url = data["next"]
+                num_launches += 100
+
+            logging.info(f"✓ ({len(launches)} launches)")
+            return launches
             
         except Exception as e:
-            print(f"❌ Error fetching: {e}")
-            
-        return all_launches
+            logging.error(f"❌ Error fetching: {e}")
+            return []
     
-    def fetch_upcoming_launches(self, limit: int = 100) -> List[Dict]:
+    def fetch_upcoming_launches(self, max_launches: int = 100) -> List[Dict]:
         """Fetch upcoming launches from API - 1 year in the future"""
         now = datetime.utcnow()
         end_date = now + timedelta(days=365)  # Next 1 year
@@ -121,26 +117,26 @@ class SpaceDevsClient:
             "net__gte": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "net__lte": end_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "mode": "detailed",
-            "limit": min(limit, 100),  # API max is 100 per page
+            "limit": min(max_launches, 100),  # API max is 100 per page
             "ordering": "net",
         }
         
-        return self._fetch_launches(params)
+        return self._fetch_launches(params, max_launches)
     
-    def fetch_previous_launches(self, limit: int = 100) -> List[Dict]:
+    def fetch_previous_launches(self, max_launches: int = 100) -> List[Dict]:
         """Fetch previous launches from API - 3 years in the past"""
         now = datetime.utcnow()
-        start_date = now - timedelta(days=1095)  # Last 3 years (365 * 3)
+        start_date = now - timedelta(days=365*3)  # Last 3 years (365 * 3)
         
         params = {
             "net__gte": start_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "net__lte": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "mode": "detailed",
-            "limit": min(limit, 100),
+            "limit": min(max_launches, 100),
             "ordering": "-net",  # Reverse chronological
         }
         
-        return self._fetch_launches(params)
+        return self._fetch_launches(params, max_launches)
     
     def fetch_launches_by_date_range(self, start_date: str, end_date: str) -> List[Dict]:
         """Fetch launches within a date range"""
@@ -232,7 +228,6 @@ class SpaceDevsClient:
             rocket = launch['rocket']
             configuration = rocket['configuration']
             
-            logging.debug("full_name: "+ str(configuration['full_name']) + " external_id: "+ str(rocket["id"]))
             rocket_name = configuration.get('full_name') or configuration.get('name', 'Unknown')
             # # TODO handle rocket family
             # rocket_family = configuration['families']
@@ -370,7 +365,6 @@ class SpaceDevsClient:
                 name=rocket_data["name"],               
                 defaults=rocket_data
             )
-            logging.debug(f"created rocket: {rocket.name, rocket.external_id}")
         except Exception as e:
             logging.error(f"  ⚠ Could not create Rocket {rocket_data['name'], rocket_data['external_id'], launch_data['external_id']} : {e}")
             return ('skipped', 0)
@@ -432,7 +426,7 @@ class SpaceDevsClient:
         """
         print(f"Fetching up to {limit} upcoming launches from Space Devs...")
         
-        api_launches = self.fetch_upcoming_launches(limit=limit)
+        api_launches = self.fetch_upcoming_launches(limit)
         
         added = 0
         updated = 0
@@ -518,11 +512,11 @@ class SpaceDevsClient:
             'total_processed': len(api_launches)
         }
     
-    def sync_previous_launches(self, limit: int = 50) -> Dict:
+    def sync_previous_launches(self, limit: int = 100) -> Dict:
         """Sync previous launches for historical data"""
         print(f"Fetching up to {limit} previous launches from Space Devs...")
         
-        api_launches = self.fetch_previous_launches(limit=limit)
+        api_launches = self.fetch_previous_launches(limit)
         
         added = 0
         updated = 0
@@ -532,7 +526,7 @@ class SpaceDevsClient:
         for api_launch in api_launches:
             try:
                 launch_data = self._parse_launch_data(api_launch)
-                action, launch_id = self._sync_launch_to_db(launch_data)
+                action, _ = self._sync_launch_to_db(launch_data)
                 
                 if action == 'added':
                     added += 1
@@ -544,10 +538,10 @@ class SpaceDevsClient:
             except Exception as e:
                 errors.append(str(e))
         
-        # Log sync
-        status = 'SUCCESS' if not errors else 'PARTIAL'
-        error_msg = '; '.join(errors[:5]) if errors else None
-        self.db.log_sync('SPACE_DEVS_PREVIOUS', added, updated, status, error_msg)
+        # # Log sync
+        # status = 'SUCCESS' if not errors else 'PARTIAL'
+        # error_msg = '; '.join(errors[:5]) if errors else None
+        # self.db.log_sync('SPACE_DEVS_PREVIOUS', added, updated, status, error_msg)
         
         return {
             'added': added,
@@ -623,14 +617,14 @@ class SpaceDevsClient:
         print(f"Total Errors:    {len(all_results['errors'])}")
         print(f"Total Processed: {all_results['total_processed']}")
         
-        # Log the full sync
-        status = 'SUCCESS' if not all_results['errors'] else 'PARTIAL'
-        error_msg = '; '.join(all_results['errors'][:10]) if all_results['errors'] else None
-        self.db.log_sync('SPACE_DEVS_FULL_RANGE', 
-                        all_results['added'], 
-                        all_results['updated'], 
-                        status, 
-                        error_msg)
+        # # Log the full sync
+        # status = 'SUCCESS' if not all_results['errors'] else 'PARTIAL'
+        # error_msg = '; '.join(all_results['errors'][:10]) if all_results['errors'] else None
+        # self.db.log_sync('SPACE_DEVS_FULL_RANGE', 
+        #                 all_results['added'], 
+        #                 all_results['updated'], 
+        #                 status, 
+        #                 error_msg)
         
         return all_results
     
