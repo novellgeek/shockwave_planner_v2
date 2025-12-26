@@ -18,9 +18,11 @@ import sys
 import os
 
 from data.space_devs import SpaceDevsClient
-from gui.enhanced_list_view import EnhancedListView
 from data.space_devs_worker import SyncWorker
 
+# import GUI elements
+from gui.enhanced_list_view import EnhancedListView
+from gui.timeline_view import TimelineView
 
 class MainWindow(QMainWindow):
     """Main application window for SHOCKWAVE PLANNER v2.0"""
@@ -42,7 +44,7 @@ class MainWindow(QMainWindow):
         
         new_launch_action = QAction('New Launch', self)
         new_launch_action.setShortcut('Ctrl+N')
-        # new_launch_action.triggered.connect(self.new_launch)
+        # new_launch_action.triggered.connect(self.new_launch) TODO
         file_menu.addAction(new_launch_action)
         
         file_menu.addSeparator()
@@ -66,27 +68,27 @@ class MainWindow(QMainWindow):
         sync_upcoming_action.triggered.connect(self.sync_upcoming_launches)
         data_menu.addAction(sync_upcoming_action)
         
-        # sync_previous_action = QAction('Sync Previous Launches (Space Devs)', self)
-        # sync_previous_action.triggered.connect(self.sync_previous_launches)
-        # data_menu.addAction(sync_previous_action)
+        sync_previous_action = QAction('Sync Previous Launches (Space Devs)', self)
+        # sync_previous_action.triggered.connect(self.sync_previous_launches) TODO
+        data_menu.addAction(sync_previous_action)
         
         data_menu.addSeparator()
         
-        # sync_rockets_action = QAction('Sync Rocket Details (Space Devs)', self)
-        # sync_rockets_action.triggered.connect(self.sync_rocket_details)
-        # data_menu.addAction(sync_rockets_action)
+        sync_rockets_action = QAction('Sync Rocket Details (Space Devs)', self)
+        # sync_rockets_action.triggered.connect(self.sync_rocket_details) TODO
+        data_menu.addAction(sync_rockets_action)
         
         data_menu.addSeparator()
         
-        # sync_history_action = QAction('View Sync History', self)
-        # sync_history_action.triggered.connect(self.show_sync_history)
-        # data_menu.addAction(sync_history_action)
+        sync_history_action = QAction('View Sync History', self)
+        sync_history_action.triggered.connect(self.show_sync_history)
+        data_menu.addAction(sync_history_action)
         
-        # # Help menu
-        # help_menu = menubar.addMenu('Help')
-        # about_action = QAction('About', self)
-        # # about_action.triggered.connect(self.show_about)
-        # help_menu.addAction(about_action)
+        # Help menu
+        help_menu = menubar.addMenu('Help')
+        about_action = QAction('About', self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
         
         # Central widget
         central_widget = QWidget()
@@ -97,39 +99,39 @@ class MainWindow(QMainWindow):
         # Tab widget
         self.tab_widget = QTabWidget()
         
-        # # Master Activity Schedule - Launch
+        # Master Activity Schedule - Launch
         # self.timeline_view = TimelineView()
-        # self.timeline_view.launch_selected.connect(self.edit_launch)
+        # # self.timeline_view.launch_selected.connect(self.edit_launch) TODO
         # self.tab_widget.addTab(self.timeline_view, "Master Activity Schedule - Launch")
         
-        # # Master Activity Schedule - Re-entry  
+        # # Master Activity Schedule - Re-entry TODO 
         # self.reentry_timeline_view = ReentryTimelineView()
         # self.reentry_timeline_view.reentry_selected.connect(self.edit_reentry)
         # self.tab_widget.addTab(self.reentry_timeline_view, "Master Activity Schedule - Re-entry")
         
         # Enhanced List view
         self.list_view = EnhancedListView()
-        # self.list_view.launch_selected.connect(self.edit_launch)
+        # self.list_view.launch_selected.connect(self.edit_launch) TODO
         self.tab_widget.addTab(self.list_view, "Launch List View")
         
-        # # Launch Site Map view
+        # # Launch Site Map view TODO
         # self.map_view = MapView()
         # self.map_view.site_selected.connect(self.show_site_launches)
         # self.tab_widget.addTab(self.map_view, "Launch Site Map")
         
-        # # Statistics view
+        # # Statistics view TODO
         # self.statistics_view = StatisticsView()
         # self.tab_widget.addTab(self.statistics_view, "Launch Statistics")
         
-        # # Launch Sites view
+        # # Launch Sites view TODO
         # self.sites_view = LaunchSitesView(parent=self)
         # self.tab_widget.addTab(self.sites_view, "Launch Sites")
         
-        # # Drop Zones view
+        # # Drop Zones view TODO
         # self.drop_zones_view = DropZonesView(parent=self)
         # self.tab_widget.addTab(self.drop_zones_view, "Drop Zones")
         
-        # # Rockets view
+        # # Rockets view TODO
         # self.rockets_view = RocketsView(parent=self)
         # self.tab_widget.addTab(self.rockets_view, "Launch Vehicles")
         # # Re-entry vehicle view
@@ -141,21 +143,21 @@ class MainWindow(QMainWindow):
         # Action buttons
         button_layout = QHBoxLayout()
         
-        # new_btn = QPushButton("+ New Launch")
+        # new_btn = QPushButton("+ New Launch") TODO
         # new_btn.clicked.connect(self.new_launch)
         # button_layout.addWidget(new_btn)
         
-        # new_reentry_btn = QPushButton("+ New Re-entry")
+        # new_reentry_btn = QPushButton("+ New Re-entry") TODO
         # new_reentry_btn.clicked.connect(self.new_reentry)
         # button_layout.addWidget(new_reentry_btn)
         
-        # sync_btn = QPushButton("🔄 Sync Space Devs")
+        # sync_btn = QPushButton("🔄 Sync Space Devs") TODO
         # sync_btn.clicked.connect(self.sync_upcoming_launches)
         # button_layout.addWidget(sync_btn)
         
-        # refresh_btn = QPushButton("♻️ Refresh")
-        # refresh_btn.clicked.connect(self.refresh_all)
-        # button_layout.addWidget(refresh_btn)
+        refresh_btn = QPushButton("♻️ Refresh")
+        refresh_btn.clicked.connect(self.refresh_all)
+        button_layout.addWidget(refresh_btn)
         
         button_layout.addStretch()
         
@@ -171,28 +173,28 @@ class MainWindow(QMainWindow):
         # Status bar
         self.statusBar().showMessage("Ready - SHOCKWAVE PLANNER v2.0")
     
-    # def new_launch(self):
+    # def new_launch(self): TODO
     #     """Create new launch"""
     #     dialog = LaunchEditorDialog(parent=self)
     #     if dialog.exec() == QDialog.DialogCode.Accepted:
     #         self.refresh_all()
     #         self.statusBar().showMessage("Launch added successfully", 3000)
     
-    # def new_reentry(self):
+    # def new_reentry(self): TODO
     #     """Create new re-entry"""
     #     dialog = ReentryDialog(parent=self)
     #     if dialog.exec() == QDialog.DialogCode.Accepted:
     #         self.refresh_all()
     #         self.statusBar().showMessage("Re-entry added successfully", 3000)
     
-    # def edit_launch(self, launch_id: int):
+    # def edit_launch(self, launch_id: int): TODO
     #     """Edit existing launch"""
     #     dialog = LaunchEditorDialog(launch_id, parent=self)
     #     if dialog.exec() == QDialog.DialogCode.Accepted:
     #         self.refresh_all()
     #         self.statusBar().showMessage("Launch updated successfully", 3000)
     
-    # def edit_reentry(self, reentry_id: int):
+    # def edit_reentry(self, reentry_id: int): TODO
     #     """Edit existing re-entry"""
     #     dialog = ReentryDialog(parent=self, reentry_id=reentry_id)
     #     if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -212,7 +214,7 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self.start_sync('upcoming', 100)
     
-    # def sync_previous_launches(self):
+    # def sync_previous_launches(self): TODO
     #     """Sync previous launches from Space Devs"""
     #     reply = QMessageBox.question(
     #         self,
@@ -225,7 +227,7 @@ class MainWindow(QMainWindow):
     #     if reply == QMessageBox.StandardButton.Yes:
     #         self.start_sync('previous', 50)
     
-    # def sync_rocket_details(self):
+    # def sync_rocket_details(self): TODO
     #     """Sync rocket details from Space Devs"""
     #     rockets_count = len(self.db.get_all_rockets())
         
@@ -277,39 +279,39 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage("Sync complete", 5000)
     
-    # def show_sync_history(self):
-    #     """Show sync history"""
-    #     QMessageBox.information(
-    #         self,
-    #         "Sync History",
-    #         "Sync history viewer coming soon!\n\n"
-    #         "For now, check the sync_log table in the database directly."
-    #     )
+    def show_sync_history(self):
+        """Show sync history"""
+        QMessageBox.information(
+            self,
+            "Sync History",
+            "Sync history viewer coming soon!\n\n"
+            "For now, check the sync_log table in the database directly."
+        )
     
-    # def show_about(self):
-    #     """Show about dialog"""
-    #     QMessageBox.about(
-    #         self,
-    #         "About SHOCKWAVE PLANNER",
-    #         "<h2>SHOCKWAVE PLANNER v2.0</h2>"
-    #         "<p><b>Desktop Launch Operations Planning System</b></p>"
-    #         "<p>Created for Remix Astronautics</p>"
-    #         "<p>Built with Python & PyQt6</p>"
-    #         "<br>"
-    #         "<p><b>Features:</b></p>"
-    #         "<ul>"
-    #         "<li>Comprehensive launch tracking</li>"
-    #         "<li>Re-entry operations management</li>"
-    #         "<li>Space Devs API integration</li>"
-    #         "<li>Timeline visualization</li>"
-    #         "<li>NOTAM tracking</li>"
-    #         "</ul>"
-    #         "<br>"
-    #         "<p>Author: Remix Astronautics</p>"
-    #         "<p>December 2025</p>"
-    #     )
+    def show_about(self):
+        """Show about dialog"""
+        QMessageBox.about(
+            self,
+            "About SHOCKWAVE PLANNER",
+            "<h2>SHOCKWAVE PLANNER v2.0</h2>"
+            "<p><b>Desktop Launch Operations Planning System</b></p>"
+            "<p>Created for Remix Astronautics</p>"
+            "<p>Built with Python & PyQt6</p>"
+            "<br>"
+            "<p><b>Features:</b></p>"
+            "<ul>"
+            "<li>Comprehensive launch tracking</li>"
+            "<li>Re-entry operations management</li>"
+            "<li>Space Devs API integration</li>"
+            "<li>Timeline visualization</li>"
+            "<li>NOTAM tracking</li>"
+            "</ul>"
+            "<br>"
+            "<p>Author: Remix Astronautics</p>"
+            "<p>December 2025</p>"
+        )
     
-    # def show_site_launches(self, site_id: int):
+    # def show_site_launches(self, site_id: int): TODO
     #     """Show launches for selected site from map"""
     #     # Get site info
     #     sites = self.db.get_all_sites()
@@ -356,7 +358,6 @@ class MainWindow(QMainWindow):
         
         self.statusBar().showMessage("Refreshed", 2000)
     
-    # def closeEvent(self, event):
-    #     """Handle window close"""
-    #     self.db.close()
-    #     event.accept()
+    def closeEvent(self, event):
+        """Handle window close"""
+        event.accept()

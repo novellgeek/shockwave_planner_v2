@@ -252,7 +252,7 @@ class EnhancedListView(QWidget):
         filter_name = filter_names.get(self.current_filter, 'All')
         self.status_label.setText(f"Showing {len(launches)} launches ({filter_name})")
     
-    def perform_search(self): #FIXME
+    def perform_search(self):
         """Search launches"""
         search_term = self.search_edit.text()
         if search_term:
