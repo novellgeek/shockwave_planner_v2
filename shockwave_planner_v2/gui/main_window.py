@@ -99,10 +99,10 @@ class MainWindow(QMainWindow):
         # Tab widget
         self.tab_widget = QTabWidget()
         
-        # Master Activity Schedule - Launch
-        # self.timeline_view = TimelineView()
-        # # self.timeline_view.launch_selected.connect(self.edit_launch) TODO
-        # self.tab_widget.addTab(self.timeline_view, "Master Activity Schedule - Launch")
+       # Master Activity Schedule - Launch
+        self.timeline_view = TimelineView()
+        # self.timeline_view.launch_selected.connect(self.edit_launch) TODO
+        self.tab_widget.addTab(self.timeline_view, "Master Activity Schedule - Launch")
         
         # # Master Activity Schedule - Re-entry TODO 
         # self.reentry_timeline_view = ReentryTimelineView()
@@ -346,7 +346,7 @@ class MainWindow(QMainWindow):
         # Update all pad turnarounds from launch history
         # self.db.update_all_pad_turnarounds_from_history()
         
-        # self.timeline_view.update_timeline()
+        self.timeline_view.update_timeline()
         # self.reentry_timeline_view.update_timeline()
         self.list_view.refresh()
         # self.map_view.refresh()
