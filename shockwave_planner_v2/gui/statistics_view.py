@@ -5,6 +5,7 @@ Launch statistics and analytics overview with interactive charts
 Author: Remix Astronautics
 Date: December 2025
 """
+import calendar
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
                               QFormLayout, QLabel, QTableWidget,
                               QTableWidgetItem, QHeaderView, QComboBox,
@@ -15,6 +16,13 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
+from django.db.models import Count
+from django.db.models import Q
+
+# import data models
+from data.db.models.launch import Launch
+from data.db.models.launch_site import LaunchSite
+from data.db.models.rocket import Rocket
 
 class StatisticsView(QWidget):
     """Statistics and analytics view for launch data"""
@@ -29,10 +37,40 @@ class StatisticsView(QWidget):
         layout = QVBoxLayout()
         
         # 5-Year Launch Overview (at the top)
-        yearly_stats = self.db.get_yearly_statistics(5)
+        curr_yr = datetime.now().year
+        date_range = (str(curr_yr-5), str(curr_yr))
+        stored_years = Launch.objects.filter(launch_date__year__range=date_range).values("launch_date__year").distinct().reverse()
+        stored_years = [yr['launch_date__year'] for yr in stored_years]
+
+        launches_per_yr = Launch.objects.values("launch_date__year").annotate(total=Count("launch_date__year"))
+        success_per_yr = Launch.objects.filter(status__name="Success").values("launch_date__year").annotate(total=Count("launch_date__year"))
+        fail_per_yr = Launch.objects.filter(Q(status__name="Failure") | Q(status__name="Partial Failure")).values("launch_date__year").annotate(total=Count("launch_date__year"))
         
-        # Reverse the list so 2025 is at the top
-        yearly_stats.reverse()
+        yearly_stats = []
+        
+        for year in stored_years:
+            total = launches_per_yr.filter(launch_date__year=year)
+            success = success_per_yr.filter(launch_date__year=year)
+            fail = fail_per_yr.filter(launch_date__year=year)
+
+            total_count = total[0]["total"] if len(total) > 0 else 0
+            success_count = success[0]["total"] if len(success) > 0 else 0
+            fail_count = fail[0]["total"] if len(fail) > 0 else 0
+
+            pending_count = total_count - success_count - fail_count
+
+            success_rate = 0
+            if success_count + fail_count > 0:
+                success_rate = (success_count / (success_count + fail_count)) * 100
+            
+            yearly_stats.append({
+                'year': year,
+                'total': total_count,
+                'successful': success_count,
+                'failed': fail_count,
+                'pending': pending_count,
+                'success_rate': success_rate
+            })      
         
         overview_group = QGroupBox("Launch Statistics - Past 5 Years")
         overview_layout = QVBoxLayout()
@@ -204,12 +242,13 @@ class StatisticsView(QWidget):
     
     def populate_countries(self):
         """Populate the country dropdown"""
-        countries = self.db.get_countries()
+        countries = LaunchSite.objects.values("country").distinct()
+        
         self.country_combo.clear()
         self.country_combo.addItem("Global (All Countries)")
         for country in countries:
             if country:  # Only add non-empty country names
-                self.country_combo.addItem(country)
+                self.country_combo.addItem(country["country"])
     
     def populate_entities(self):
         """Populate launch sites or rockets based on selected country and filter type"""
@@ -222,15 +261,24 @@ class StatisticsView(QWidget):
         filter_type = self.filter_type_combo.currentText()
         
         if filter_type == "Launch Sites":
-            entities = self.db.get_launch_sites_by_country(country)
+            if country is None:
+                entities = LaunchSite.objects.values("name").distinct()
+            else:
+                entities = LaunchSite.objects.filter(country=country).values("name").distinct()
+            
             self.entity_combo.addItem("All Sites")
             for entity in entities:
-                self.entity_combo.addItem(entity)
+                self.entity_combo.addItem(entity["name"])
+        
         else:  # Rockets
-            entities = self.db.get_rockets_by_country(country)
+            if country is None:
+                entities = Rocket.objects.values("name").distinct()
+            else:
+                entities = Rocket.objects.filter(country=country).values("name").distinct()
+
             self.entity_combo.addItem("All Rockets")
             for entity in entities:
-                self.entity_combo.addItem(entity)
+                self.entity_combo.addItem(entity["name"])
     
     def on_country_changed(self):
         """Handle country selection change"""
@@ -322,12 +370,58 @@ class StatisticsView(QWidget):
         for idx, year in enumerate(years_to_plot):
             if is_daily:
                 # Daily data - pass the selected month
-                dates, counts, date_range = self.db.get_launch_data_daily_by_month(
-                    year, selected_month, num_months, country, 
-                    entity if filter_type == "Launch Sites" else None,
-                    entity if filter_type == "Rockets" else None
-                )
+                site = entity if filter_type == "Launch Sites" else None
+                rocket = entity if filter_type == "Rockets" else None
+
+                # Calculate date range based on selected month and number of months
+                start_date = datetime(year, selected_month, 1)
                 
+                # Calculate end date
+                end_month = selected_month + num_months - 1
+                end_year = year
+                if end_month > 12:
+                    end_month = end_month - 12
+                    end_year = year + 1
+                
+                # Get last day of the end month
+                last_day = calendar.monthrange(end_year, end_month)[1]
+                end_date = datetime(end_year, end_month, last_day)
+
+                daily_launch_counts = Launch.objects.filter(launch_date__range=(start_date, end_date))                
+
+                if country is not None or site is not None:
+                    if country is not None:
+                        daily_launch_counts = daily_launch_counts.filter(site__country=country)
+                        
+                    if site is not None:
+                        daily_launch_counts = daily_launch_counts.filter(site__name=site)
+                
+                if rocket is not None:
+                    daily_launch_counts = daily_launch_counts.filter(rocket__name=rocket)
+
+                # get values
+                daily_launch_counts = daily_launch_counts.values("launch_date").annotate(Count("launch_date"))
+            
+                # Create continuous date range with all days
+                date_counts = {row["launch_date"].strftime('%Y-%m-%d'): row["launch_date__count"] for row in daily_launch_counts}
+                
+                dates = []
+                counts = []
+                current = start_date
+                while current <= end_date:
+                    date_str = current.strftime('%Y-%m-%d')
+                    dates.append(str(current.day))  # Just the day number
+                    counts.append(date_counts.get(date_str, 0))
+                    current += timedelta(days=1)
+                
+                # Create date range string for display
+                month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                if num_months == 1:
+                    date_range = f"{month_names[selected_month-1]} {year}"
+                else:
+                    date_range = f"{month_names[selected_month-1]} - {month_names[end_month-1]} {year}"
+
                 # Plot with fewer labels on X-axis (show only day numbers)
                 ax.plot(range(len(dates)), counts, marker='o', markersize=3, 
                        label=str(year), color=year_colors[year], linewidth=2)
@@ -343,11 +437,30 @@ class StatisticsView(QWidget):
                     self.month_range_label.setText(f"({date_range})")
             else:
                 # Monthly data
-                months, counts = self.db.get_launch_data_monthly(
-                    year, country,
-                    entity if filter_type == "Launch Sites" else None,
-                    entity if filter_type == "Rockets" else None
-                )
+                site = entity if filter_type == "Launch Sites" else None
+                rocket = entity if filter_type == "Rockets" else None
+
+                launch_count_by_mth = Launch.objects
+
+                if country is not None or site is not None:
+                    if country is not None:
+                        launch_count_by_mth = launch_count_by_mth.filter(site__country=country)
+
+                    if site is not None:
+                        launch_count_by_mth = launch_count_by_mth.filter(site__name=site)
+                                
+                if rocket is not None:
+                    launch_count_by_mth = launch_count_by_mth.filter(rocket__name=rocket)
+
+                if entity is not None:
+                    launch_count_by_mth = launch_count_by_mth.filter(site__name=entity)
+                
+                launch_count_by_mth = launch_count_by_mth.values("launch_date__month").annotate(Count("launch_date__month")) 
+
+                month_counts = {int(row['launch_date__month']): row["launch_date__month__count"] for row in launch_count_by_mth}
+                months = list(range(1, 13))
+                counts = [month_counts.get(m, 0) for m in months]
+
                 month_labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
                 ax.plot(months, counts, marker='o', markersize=5,
