@@ -11,6 +11,10 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                               QDialogButtonBox, QScrollArea)
 from PyQt6.QtCore import Qt
 
+from rocket_editor_dialog import RocketEditorDialog
+
+# import data models
+from data.db.models.rocket import Rocket
 
 class RocketsView(QWidget):
     """Management view for rockets"""
@@ -64,31 +68,27 @@ class RocketsView(QWidget):
     
     def refresh_table(self):
         """Refresh the rockets table"""
-        rockets = self.db.get_all_rockets()
-        
+        rockets = Rocket.objects.all()
+
         self.table.setRowCount(len(rockets))
         
-        for row, rocket in enumerate(rockets):
-            # Helper function to safely convert values to strings
-            def safe_str(value):
-                return str(value) if value is not None else ''
-            
-            self.table.setItem(row, 0, QTableWidgetItem(safe_str(rocket.get('rocket_id', ''))))
-            self.table.setItem(row, 1, QTableWidgetItem(safe_str(rocket.get('country', ''))))
-            self.table.setItem(row, 2, QTableWidgetItem(safe_str(rocket.get('name', ''))))
-            self.table.setItem(row, 3, QTableWidgetItem(safe_str(rocket.get('alternative_name', ''))))   
-            self.table.setItem(row, 4, QTableWidgetItem(safe_str(rocket.get('family', ''))))
-            self.table.setItem(row, 5, QTableWidgetItem(safe_str(rocket.get('variant', ''))))
-            self.table.setItem(row, 6, QTableWidgetItem(safe_str(rocket.get('stages', ''))))
-            self.table.setItem(row, 7, QTableWidgetItem(safe_str(rocket.get('boosters', ''))))
-            self.table.setItem(row, 8, QTableWidgetItem(safe_str(rocket.get('payload_leo', ''))))
-            self.table.setItem(row, 9, QTableWidgetItem(safe_str(rocket.get('payload_sso', ''))))
-            self.table.setItem(row, 10, QTableWidgetItem(safe_str(rocket.get('payload_gto', ''))))
-            self.table.setItem(row, 11, QTableWidgetItem(safe_str(rocket.get('payload_tli', ''))))
+        for row, rocket in enumerate(rockets):           
+            self.table.setItem(row, 0, QTableWidgetItem(str(rocket.pk)))
+            self.table.setItem(row, 1, QTableWidgetItem(rocket.country))
+            self.table.setItem(row, 2, QTableWidgetItem(rocket.name))
+            self.table.setItem(row, 3, QTableWidgetItem(rocket.alt_name))
+            self.table.setItem(row, 4, QTableWidgetItem(rocket.family))
+            self.table.setItem(row, 5, QTableWidgetItem(rocket.variant))
+            self.table.setItem(row, 6, QTableWidgetItem(rocket.stages))
+            self.table.setItem(row, 7, QTableWidgetItem(rocket.boosters)) #FIXME possibly use len(launcher_stages) rocket["configuration"]
+            self.table.setItem(row, 8, QTableWidgetItem(str(rocket.payload_leo)))
+            self.table.setItem(row, 9, QTableWidgetItem(str(rocket.payload_sso)))
+            self.table.setItem(row, 10, QTableWidgetItem(str(rocket.payload_gto)))
+            self.table.setItem(row, 11, QTableWidgetItem(str(rocket.payload_tli))) #FIXME
 
     def add_rocket(self):
         """Add a new rocket"""
-        dialog = RocketEditorDialog(self.db, parent=self)
+        dialog = RocketEditorDialog(parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_table()
             if self.window():
@@ -103,17 +103,17 @@ class RocketsView(QWidget):
         
         # Safely get the rocket_id from the table
         id_item = self.table.item(current_row, 0)
-        if not id_item or not id_item.text().strip():
+        if id_item is None or id_item.text().strip() is None:
             QMessageBox.warning(self, "Invalid Selection", "The selected row has no valid ID.")
             return
-        
+        id_item.data
         try:
             rocket_id = int(id_item.text())
         except ValueError:
             QMessageBox.warning(self, "Invalid ID", f"Invalid rocket ID: {id_item.text()}")
             return
         
-        dialog = RocketEditorDialog(self.db, rocket_id=rocket_id, parent=self)
+        dialog = RocketEditorDialog(rocket_id=rocket_id, parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_table()
             if self.window():
@@ -150,162 +150,11 @@ class RocketsView(QWidget):
         
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                self.db.delete_rocket(rocket_id)
+                Rocket.objects.filter(pk=rocket_id).delete()
+
                 self.refresh_table()
                 if self.window():
                     self.window().refresh_all()
                 QMessageBox.information(self, "Success", "Rocket deleted successfully!")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to delete rocket: {e}")
-
-
-class RocketEditorDialog(QDialog):
-    """Dialog for adding/editing rockets"""
-    
-    def __init__(self, db, rocket_id=None, parent=None):
-        super().__init__(parent)
-        self.db = db
-        self.rocket_id = rocket_id
-        self.setWindowTitle("Add Rocket" if not rocket_id else "Edit Rocket")
-        self.setModal(True)
-        self.init_ui()
-        
-        if rocket_id:
-            self.load_rocket_data()
-    
-    def init_ui(self):
-        """Initialize the user interface"""
-        # Create a scroll area for the form
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setMinimumWidth(500)
-        
-        form_widget = QWidget()
-        layout = QFormLayout(form_widget)
-        
-        # Basic Information
-        self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("e.g., Falcon 9 Block 5, Long March 2D")
-        layout.addRow("Rocket Name:*", self.name_edit)
-        
-        self.alternative_name_edit = QLineEdit()
-        self.alternative_name_edit.setPlaceholderText("e.g., F9, CZ-2D")
-        layout.addRow("Alternative Name:", self.alternative_name_edit)
-        
-        self.family_edit = QLineEdit()
-        self.family_edit.setPlaceholderText("e.g., Falcon, Long March, Soyuz")
-        layout.addRow("Family:", self.family_edit)
-        
-        self.variant_edit = QLineEdit()
-        self.variant_edit.setPlaceholderText("e.g., Block 5, CZ-2D, 2.1a")
-        layout.addRow("Variant:", self.variant_edit)
-        
-        self.country_edit = QLineEdit()
-        self.country_edit.setPlaceholderText("e.g., USA, China, Russia")
-        layout.addRow("Country:", self.country_edit)
-        
-        # Configuration
-        self.stages_edit = QLineEdit()
-        self.stages_edit.setPlaceholderText("e.g., 2, 3")
-        layout.addRow("Stages:", self.stages_edit)
-        
-        self.boosters_edit = QLineEdit()
-        self.boosters_edit.setPlaceholderText("e.g., 0, 2, 4")
-        layout.addRow("Boosters:", self.boosters_edit)
-        
-        # Payload Capacities
-        self.payload_leo_edit = QLineEdit()
-        self.payload_leo_edit.setPlaceholderText("e.g., 22800 kg")
-        layout.addRow("Payload to LEO:", self.payload_leo_edit)
-        
-        self.payload_sso_edit = QLineEdit()
-        self.payload_sso_edit.setPlaceholderText("e.g., 15600 kg")
-        layout.addRow("Payload to SSO:", self.payload_sso_edit)
-        
-        self.payload_gto_edit = QLineEdit()
-        self.payload_gto_edit.setPlaceholderText("e.g., 8300 kg")
-        layout.addRow("Payload to GTO:", self.payload_gto_edit)
-        
-        self.payload_tli_edit = QLineEdit()
-        self.payload_tli_edit.setPlaceholderText("e.g., 4020 kg")
-        layout.addRow("Payload to TLI:", self.payload_tli_edit)
-        
-        scroll.setWidget(form_widget)
-        
-        # Main layout with scroll area and buttons
-        main_layout = QVBoxLayout()
-        main_layout.addWidget(scroll)
-        
-        # Buttons
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | 
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.save_rocket)
-        buttons.rejected.connect(self.reject)
-        main_layout.addWidget(buttons)
-        
-        self.setLayout(main_layout)
-    
-    def load_rocket_data(self):
-        """Load existing rocket data"""
-        rockets = self.db.get_all_rockets()
-        rocket = next((r for r in rockets if r['rocket_id'] == self.rocket_id), None)
-        
-        if not rocket:
-            QMessageBox.critical(self, "Error", f"Could not find rocket with ID {self.rocket_id}")
-            self.reject()
-            return
-        
-        # Helper function to safely convert values to strings
-        def safe_str(value):
-            return str(value) if value is not None else ''
-        
-        self.name_edit.setText(safe_str(rocket.get('name', '')))
-        self.alternative_name_edit.setText(safe_str(rocket.get('alternative_name', '')))
-        self.family_edit.setText(safe_str(rocket.get('family', '')))
-        self.variant_edit.setText(safe_str(rocket.get('variant', '')))
-        self.country_edit.setText(safe_str(rocket.get('country', '')))
-        self.stages_edit.setText(safe_str(rocket.get('stages', '')))
-        self.boosters_edit.setText(safe_str(rocket.get('boosters', '')))
-        self.payload_leo_edit.setText(safe_str(rocket.get('payload_leo', '')))
-        self.payload_sso_edit.setText(safe_str(rocket.get('payload_sso', '')))
-        self.payload_gto_edit.setText(safe_str(rocket.get('payload_gto', '')))
-        self.payload_tli_edit.setText(safe_str(rocket.get('payload_tli', '')))
-    
-    def save_rocket(self):
-        """Save the rocket"""
-        name = self.name_edit.text().strip()
-        
-        if not name:
-            QMessageBox.warning(self, "Validation Error", "Please enter a rocket name.")
-            return
-        
-        rocket_data = {
-            'name': name,
-            'alternative_name': self.alternative_name_edit.text().strip() or None,
-            'family': self.family_edit.text().strip() or None,
-            'variant': self.variant_edit.text().strip() or None,
-            'country': self.country_edit.text().strip() or None,
-            'stages': self.stages_edit.text().strip() or None,
-            'boosters': self.boosters_edit.text().strip() or None,
-            'payload_leo': self.payload_leo_edit.text().strip() or None,
-            'payload_sso': self.payload_sso_edit.text().strip() or None,
-            'payload_gto': self.payload_gto_edit.text().strip() or None,
-            'payload_tli': self.payload_tli_edit.text().strip() or None
-        }
-        
-        try:
-            if self.rocket_id:
-                self.db.update_rocket(self.rocket_id, rocket_data)
-                QMessageBox.information(self, "Success", "Rocket updated successfully!")
-            else:
-                self.db.add_rocket(rocket_data)
-                QMessageBox.information(self, "Success", "Rocket added successfully!")
-            
-            self.accept()
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save rocket: {e}")
-
-
