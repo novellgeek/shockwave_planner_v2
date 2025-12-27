@@ -127,7 +127,7 @@ class MainWindow(QMainWindow):
         self.statistics_view = StatisticsView()
         self.tab_widget.addTab(self.statistics_view, "Launch Statistics")
         
-        # # Launch Sites view TODO
+        # # Launch Sites view
         self.sites_view = LaunchSitesView(parent=self)
         self.tab_widget.addTab(self.sites_view, "Launch Sites")
         
@@ -147,17 +147,17 @@ class MainWindow(QMainWindow):
         # Action buttons
         button_layout = QHBoxLayout()
         
-        # new_btn = QPushButton("+ New Launch") TODO
+        new_btn = QPushButton("+ New Launch") #TODO
         # new_btn.clicked.connect(self.new_launch)
-        # button_layout.addWidget(new_btn)
+        button_layout.addWidget(new_btn)
         
-        # new_reentry_btn = QPushButton("+ New Re-entry") TODO
+        new_reentry_btn = QPushButton("+ New Re-entry") #TODO
         # new_reentry_btn.clicked.connect(self.new_reentry)
-        # button_layout.addWidget(new_reentry_btn)
+        button_layout.addWidget(new_reentry_btn)
         
-        # sync_btn = QPushButton("🔄 Sync Space Devs") TODO
+        sync_btn = QPushButton("🔄 Sync Space Devs") #TODO
         # sync_btn.clicked.connect(self.sync_upcoming_launches)
-        # button_layout.addWidget(sync_btn)
+        button_layout.addWidget(sync_btn)
         
         refresh_btn = QPushButton("♻️ Refresh")
         refresh_btn.clicked.connect(self.refresh_all)
@@ -218,18 +218,18 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self.start_sync('upcoming', 100)
     
-    # def sync_previous_launches(self): TODO
-    #     """Sync previous launches from Space Devs"""
-    #     reply = QMessageBox.question(
-    #         self,
-    #         'Sync Previous Launches',
-    #         'Fetch previous launches from The Space Devs API?\n\n'
-    #         'This will download up to 50 recent previous launches for historical data.',
-    #         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-    #     )
+    def sync_previous_launches(self): #TODO
+        """Sync previous launches from Space Devs"""
+        reply = QMessageBox.question(
+            self,
+            'Sync Previous Launches',
+            'Fetch previous launches from The Space Devs API?\n\n'
+            'This will download up to 50 recent previous launches for historical data.',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
         
-    #     if reply == QMessageBox.StandardButton.Yes:
-    #         self.start_sync('previous', 50)
+        if reply == QMessageBox.StandardButton.Yes:
+            self.start_sync('previous', 50)
     
     # def sync_rocket_details(self): TODO
     #     """Sync rocket details from Space Devs"""
