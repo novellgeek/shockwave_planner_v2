@@ -3,11 +3,11 @@ from django.db import models
 class LaunchSite(models.Model):
     name = models.TextField(null=False)
     launch_pad = models.TextField(null=False)
-    latitude = models.FloatField()
-    longitude = models.FloatField()
-    country = models.TextField()
-    site_type = models.TextField(default="LAUNCH")
-    external_id = models.TextField(unique=True)
+    latitude = models.FloatField(null=True)
+    longitude = models.FloatField(null=True)
+    country = models.TextField(null=True)
+    site_type = models.TextField(null=True, default="LAUNCH")
+    external_id = models.TextField(null=True)
     turnaround_days = models.IntegerField(default=7)
 
     models.UniqueConstraint(

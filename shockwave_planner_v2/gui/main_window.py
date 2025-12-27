@@ -26,6 +26,7 @@ from gui.timeline_view import TimelineView
 from gui.timeline_view_reentry import ReentryTimelineView
 from gui.map_view import MapView
 from gui.statistics_view import StatisticsView
+from gui.launch_sites_view import LaunchSitesView
 
 class MainWindow(QMainWindow):
     """Main application window for SHOCKWAVE PLANNER v2.0"""
@@ -122,13 +123,13 @@ class MainWindow(QMainWindow):
         # self.map_view.site_selected.connect(self.show_site_launches)
         self.tab_widget.addTab(self.map_view, "Launch Site Map")
         
-        # # Statistics view TODO
+        # # Statistics view
         self.statistics_view = StatisticsView()
         self.tab_widget.addTab(self.statistics_view, "Launch Statistics")
         
         # # Launch Sites view TODO
-        # self.sites_view = LaunchSitesView(parent=self)
-        # self.tab_widget.addTab(self.sites_view, "Launch Sites")
+        self.sites_view = LaunchSitesView(parent=self)
+        self.tab_widget.addTab(self.sites_view, "Launch Sites")
         
         # # Drop Zones view TODO
         # self.drop_zones_view = DropZonesView(parent=self)
