@@ -114,8 +114,8 @@ class SiteEditorDialog(QDialog):
         site_data = {
             'name': location,
             'launch_pad': pad,
-            'latitude': self.lat_spin.value() if self.lat_spin.value() != 0 else None,
-            'longitude': self.lon_spin.value() if self.lon_spin.value() != 0 else None,
+            'latitude': self.lat_spin.value(),
+            'longitude': self.lon_spin.value(),
             'country': self.country_edit.text().strip() or None,
             'site_type': 'LAUNCH',
             'turnaround_days': self.turnaround_spin.value()

@@ -27,6 +27,9 @@ from gui.timeline_view_reentry import ReentryTimelineView
 from gui.map_view import MapView
 from gui.statistics_view import StatisticsView
 from gui.launch_sites_view import LaunchSitesView
+from gui.drop_zones_view import DropZonesView
+
+from gui.reentry_vehicles_view import ReentryVehiclesView
 
 class MainWindow(QMainWindow):
     """Main application window for SHOCKWAVE PLANNER v2.0"""
@@ -131,13 +134,14 @@ class MainWindow(QMainWindow):
         self.sites_view = LaunchSitesView(parent=self)
         self.tab_widget.addTab(self.sites_view, "Launch Sites")
         
-        # # Drop Zones view TODO
-        # self.drop_zones_view = DropZonesView(parent=self)
-        # self.tab_widget.addTab(self.drop_zones_view, "Drop Zones")
+        # Drop Zones view #TODO
+        self.drop_zones_view = DropZonesView(parent=self)
+        self.tab_widget.addTab(self.drop_zones_view, "Drop Zones")
         
-        # # Rockets view TODO
+        # # Rockets view #TODO
         # self.rockets_view = RocketsView(parent=self)
         # self.tab_widget.addTab(self.rockets_view, "Launch Vehicles")
+        
         # # Re-entry vehicle view
         # self.reentry_vehicles_tab = ReentryVehiclesView()
         # self.tab_widget.addTab(self.reentry_vehicles_tab, "Re-entry Vehicles")

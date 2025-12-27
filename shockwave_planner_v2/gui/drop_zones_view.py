@@ -11,13 +11,17 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                               QDialogButtonBox, QDoubleSpinBox, QComboBox, QSpinBox)
 from PyQt6.QtCore import Qt
 
+from .zone_editor_dialog import ZoneEditorDialog
+
+# import data models
+from data.db.models.reentry_site import ReentrySite
+
 
 class DropZonesView(QWidget):
     """Management view for re-entry drop zones"""
     
-    def __init__(self, db, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.db = db
         self.init_ui()
     
     def init_ui(self):
@@ -65,30 +69,29 @@ class DropZonesView(QWidget):
     
     def refresh_table(self):
         """Refresh the zones table"""
-        # FIXED: Use get_all_reentry_sites() instead of get_all_sites()
-        zones = self.db.get_all_reentry_sites()
-        
+        zones = ReentrySite.objects.all()
+
         self.table.setRowCount(len(zones))
         
         for row, zone in enumerate(zones):
-            self.table.setItem(row, 0, QTableWidgetItem(str(zone.get('site_id', ''))))
-            self.table.setItem(row, 1, QTableWidgetItem(zone.get('location', '')))
-            self.table.setItem(row, 2, QTableWidgetItem(zone.get('drop_zone', '')))
-            self.table.setItem(row, 3, QTableWidgetItem(zone.get('country', '')))
+            self.table.setItem(row, 0, QTableWidgetItem(str(zone.pk)))
+            self.table.setItem(row, 1, QTableWidgetItem(zone.name))
+            self.table.setItem(row, 2, QTableWidgetItem(zone.drop_zone))
+            self.table.setItem(row, 3, QTableWidgetItem(zone.country))
             
             # Recovery time
-            turnaround = zone.get('turnaround_days', 7)
+            turnaround = zone.turnaround_days
             self.table.setItem(row, 4, QTableWidgetItem(str(turnaround)))
             
-            lat = zone.get('latitude')
+            lat = zone.latitude
             self.table.setItem(row, 5, QTableWidgetItem(f"{lat:.4f}°" if lat else ''))
             
-            lon = zone.get('longitude')
+            lon = zone.longitude
             self.table.setItem(row, 6, QTableWidgetItem(f"{lon:.4f}°" if lon else ''))
     
     def add_zone(self):
         """Add a new drop zone"""
-        dialog = ZoneEditorDialog(self.db, parent=self)
+        dialog = ZoneEditorDialog(parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_table()
             if self.window():
@@ -102,7 +105,7 @@ class DropZonesView(QWidget):
             return
         
         zone_id = int(self.table.item(current_row, 0).text())
-        dialog = ZoneEditorDialog(self.db, zone_id=zone_id, parent=self)
+        dialog = ZoneEditorDialog(zone_id=zone_id, parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_table()
             if self.window():
@@ -129,145 +132,11 @@ class DropZonesView(QWidget):
         
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                # FIXED: Use delete_reentry_site() instead of delete_site()
-                self.db.delete_reentry_site(zone_id)
+                ReentrySite.objects.filter(pk=zone_id).delete()
+                
                 self.refresh_table()
                 if self.window():
                     self.window().refresh_all()
                 QMessageBox.information(self, "Success", "Drop zone deleted successfully!")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to delete drop zone: {e}")
-
-
-class ZoneEditorDialog(QDialog):
-    """Dialog for adding/editing drop zones"""
-    
-    def __init__(self, db, zone_id=None, parent=None):
-        super().__init__(parent)
-        self.db = db
-        self.zone_id = zone_id
-        self.setWindowTitle("Add Drop Zone" if not zone_id else "Edit Drop Zone")
-        self.setModal(True)
-        self.init_ui()
-        
-        if zone_id:
-            self.load_zone_data()
-    
-    def init_ui(self):
-        """Initialize the user interface"""
-        layout = QFormLayout()
-        
-        # Location
-        self.location_edit = QLineEdit()
-        self.location_edit.setPlaceholderText("e.g., Pacific Ocean, Atlantic Ocean, Inner Mongolia")
-        layout.addRow("Region/Location:", self.location_edit)
-        
-        # Drop Zone
-        self.zone_edit = QLineEdit()
-        self.zone_edit.setPlaceholderText("e.g., Zone A, LZ-1, Recovery Area 3")
-        layout.addRow("Drop Zone:", self.zone_edit)
-        
-        # Country
-        self.country_edit = QLineEdit()
-        self.country_edit.setPlaceholderText("e.g., USA, China, Russia")
-        layout.addRow("Country:", self.country_edit)
-        
-        # Recovery Time
-        self.recovery_spin = QSpinBox()
-        self.recovery_spin.setRange(1, 90)
-        self.recovery_spin.setValue(7)
-        self.recovery_spin.setSuffix(" days")
-        self.recovery_spin.setToolTip("Number of days required for zone recovery/cleanup after re-entry")
-        layout.addRow("Zone Recovery:", self.recovery_spin)
-        
-        # Latitude
-        self.lat_spin = QDoubleSpinBox()
-        self.lat_spin.setRange(-90, 90)
-        self.lat_spin.setDecimals(4)
-        self.lat_spin.setSuffix("°")
-        self.lat_spin.setSpecialValueText("Not Set")
-        layout.addRow("Latitude:", self.lat_spin)
-        
-        # Longitude
-        self.lon_spin = QDoubleSpinBox()
-        self.lon_spin.setRange(-180, 180)
-        self.lon_spin.setDecimals(4)
-        self.lon_spin.setSuffix("°")
-        self.lon_spin.setSpecialValueText("Not Set")
-        layout.addRow("Longitude:", self.lon_spin)
-        
-        # Zone Type (optional)
-        self.zone_type_edit = QLineEdit()
-        self.zone_type_edit.setPlaceholderText("e.g., Ocean, Land, Desert (optional)")
-        layout.addRow("Zone Type:", self.zone_type_edit)
-        
-        # Buttons
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | 
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.save_zone)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
-        
-        self.setLayout(layout)
-    
-    def load_zone_data(self):
-        """Load existing zone data"""
-        # FIXED: Use get_all_reentry_sites() instead of get_all_sites()
-        zones = self.db.get_all_reentry_sites()
-        zone = next((z for z in zones if z['site_id'] == self.zone_id), None)
-        
-        if zone:
-            self.location_edit.setText(zone.get('location', ''))
-            self.zone_edit.setText(zone.get('drop_zone', ''))
-            self.country_edit.setText(zone.get('country', ''))
-            
-            # Recovery time
-            if zone.get('turnaround_days'):
-                self.recovery_spin.setValue(zone['turnaround_days'])
-            
-            if zone.get('latitude'):
-                self.lat_spin.setValue(zone['latitude'])
-            
-            if zone.get('longitude'):
-                self.lon_spin.setValue(zone['longitude'])
-            
-            # Zone type (if available from database)
-            if zone.get('zone_type'):
-                self.zone_type_edit.setText(zone['zone_type'])
-    
-    def save_zone(self):
-        """Save the drop zone"""
-        location = self.location_edit.text().strip()
-        zone = self.zone_edit.text().strip()
-        
-        if not location or not zone:
-            QMessageBox.warning(self, "Validation Error", 
-                              "Please enter both location and drop zone.")
-            return
-        
-        zone_data = {
-            'location': location,
-            'drop_zone': zone,
-            'country': self.country_edit.text().strip() or None,
-            'turnaround_days': self.recovery_spin.value(),
-            'latitude': self.lat_spin.value() if self.lat_spin.value() != 0 else None,
-            'longitude': self.lon_spin.value() if self.lon_spin.value() != 0 else None,
-            'zone_type': self.zone_type_edit.text().strip() or None
-        }
-        
-        try:
-            if self.zone_id:
-                # FIXED: Use update_reentry_site() instead of update_site()
-                self.db.update_reentry_site(self.zone_id, zone_data)
-                QMessageBox.information(self, "Success", "Drop zone updated successfully!")
-            else:
-                # FIXED: Use add_reentry_site() instead of add_site()
-                self.db.add_reentry_site(zone_data)
-                QMessageBox.information(self, "Success", "Drop zone added successfully!")
-            
-            self.accept()
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save drop zone: {e}")
