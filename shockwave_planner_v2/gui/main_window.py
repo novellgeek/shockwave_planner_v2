@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):
         
         new_launch_action = QAction('New Launch', self)
         new_launch_action.setShortcut('Ctrl+N')
-        # new_launch_action.triggered.connect(self.new_launch) TODO
+        new_launch_action.triggered.connect(self.new_launch)
         file_menu.addAction(new_launch_action)
         
         file_menu.addSeparator()
@@ -79,13 +79,13 @@ class MainWindow(QMainWindow):
         data_menu.addAction(sync_upcoming_action)
         
         sync_previous_action = QAction('Sync Previous Launches (Space Devs)', self)
-        # sync_previous_action.triggered.connect(self.sync_previous_launches) TODO
+        sync_previous_action.triggered.connect(self.sync_previous_launches)
         data_menu.addAction(sync_previous_action)
         
         data_menu.addSeparator()
         
         sync_rockets_action = QAction('Sync Rocket Details (Space Devs)', self)
-        # sync_rockets_action.triggered.connect(self.sync_rocket_details) TODO
+        # sync_rockets_action.triggered.connect(self.sync_rocket_details) #TODO
         data_menu.addAction(sync_rockets_action)
         
         data_menu.addSeparator()
@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
         # Action buttons
         button_layout = QHBoxLayout()
         
-        new_btn = QPushButton("+ New Launch") #TODO
+        new_btn = QPushButton("+ New Launch")
         new_btn.clicked.connect(self.new_launch)
         button_layout.addWidget(new_btn)
         
@@ -162,8 +162,8 @@ class MainWindow(QMainWindow):
         new_reentry_btn.clicked.connect(self.new_reentry)
         button_layout.addWidget(new_reentry_btn)
         
-        sync_btn = QPushButton("🔄 Sync Space Devs") #TODO
-        # sync_btn.clicked.connect(self.sync_upcoming_launches)
+        sync_btn = QPushButton("🔄 Sync Space Devs")
+        sync_btn.clicked.connect(self.sync_upcoming_launches)
         button_layout.addWidget(sync_btn)
         
         refresh_btn = QPushButton("♻️ Refresh")
@@ -191,7 +191,7 @@ class MainWindow(QMainWindow):
             self.refresh_all()
             self.statusBar().showMessage("Launch added successfully", 3000)
     
-    def new_reentry(self): #TODO
+    def new_reentry(self):
         """Create new re-entry"""
         dialog = ReentryDialog(parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -225,7 +225,7 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self.start_sync('upcoming', 100)
     
-    def sync_previous_launches(self): #TODO
+    def sync_previous_launches(self):
         """Sync previous launches from Space Devs"""
         reply = QMessageBox.question(
             self,
@@ -322,7 +322,7 @@ class MainWindow(QMainWindow):
             "<p>December 2025</p>"
         )
     
-    # def show_site_launches(self, site_id: int): TODO
+    # def show_site_launches(self, site_id: int): #TODO
     #     """Show launches for selected site from map"""
     #     # Get site info
     #     sites = self.db.get_all_sites()
@@ -364,7 +364,7 @@ class MainWindow(QMainWindow):
         self.sites_view.refresh_table()
         self.drop_zones_view.refresh_table()
         self.rockets_view.refresh_table()
-        # self.reentry_vehicles_tab.refresh_table()
+        self.reentry_vehicles_tab.refresh_table()
         self.statistics_view.refresh()
         
         self.statusBar().showMessage("Refreshed", 2000)

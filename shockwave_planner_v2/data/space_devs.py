@@ -20,6 +20,7 @@ from data.db.models.launch import Launch
 from data.db.models.launch_site import LaunchSite
 from data.db.models.rocket import Rocket
 from data.db.models.status import Status
+from data.db.models.sync_log import SyncLog
 
 class SpaceDevsClient:
     """Interface to The Space Devs Launch Library API"""
@@ -356,7 +357,7 @@ class SpaceDevsClient:
         # Update or create site
         try:
             # TODO: add suppport for multiple site_types
-            # TODO: add support for different turnaround days
+            # TODO: add support for different turnaround days field is fastest_turnaround (ISO 8601 duration format) in rocket['configuration']
             site, _ = LaunchSite.objects.update_or_create(
                 external_id=site_data["external_id"],
                 defaults=site_data
@@ -378,10 +379,7 @@ class SpaceDevsClient:
             return ('skipped', 0)
         
         # Find status
-        status_name_mapped = launch_data['status_name']
-        
-        # status_id = self.db.find_status_by_name(status_name_mapped)
-        
+        status_name_mapped = launch_data['status_name']      
         status = Status.objects.filter(name=status_name_mapped).first()
 
         if status is None:
@@ -465,11 +463,18 @@ class SpaceDevsClient:
                 logging.error(f"  X Error: {error_msg}")
                 skipped += 1
         
-        # # Log sync
-        # status = 'SUCCESS' if not errors else 'PARTIAL'
-        # error_msg = '; '.join(errors[:5]) if errors else None
-        # self.db.log_sync('SPACE_DEVS_UPCOMING', added, updated, status, error_msg)
-        
+        # Log sync
+        status = 'SUCCESS' if not errors else 'PARTIAL'
+        error_msg = '; '.join(errors[:5]) if errors else None
+        sync_data = {
+            "data_source": "SPACE_DEVS_UPCOMING",
+            "records_added": added,
+            "records_updated": updated,
+            "status": status,
+            "error_msg": error_msg
+        }
+        SyncLog.objects.create(**sync_data)
+
         return {
             'added': added,
             'updated': updated,
@@ -507,10 +512,17 @@ class SpaceDevsClient:
             except Exception as e:
                 errors.append(str(e))
         
-        # # Log sync
-        # status = 'SUCCESS' if not errors else 'PARTIAL'
-        # error_msg = '; '.join(errors[:5]) if errors else None
-        # self.db.log_sync('SPACE_DEVS_RANGE', added, updated, status, error_msg)
+        # Log sync
+        status = 'SUCCESS' if not errors else 'PARTIAL'
+        error_msg = '; '.join(errors[:5]) if errors else None
+        sync_data = {
+            "data_source": "SPACE_DEVS_RANGE",
+            "records_added": added,
+            "records_updated": updated,
+            "status": status,
+            "error_msg": error_msg
+        }
+        SyncLog.objects.create(**sync_data)
         
         return {
             'added': added,
@@ -546,10 +558,17 @@ class SpaceDevsClient:
             except Exception as e:
                 errors.append(str(e))
         
-        # # Log sync
-        # status = 'SUCCESS' if not errors else 'PARTIAL'
-        # error_msg = '; '.join(errors[:5]) if errors else None
-        # self.db.log_sync('SPACE_DEVS_PREVIOUS', added, updated, status, error_msg)
+        # Log sync
+        status = 'SUCCESS' if not errors else 'PARTIAL'
+        error_msg = '; '.join(errors[:5]) if errors else None
+        sync_data = {
+            "data_source": "SPACE_DEVS_PREVIOUS",
+            "records_added": added,
+            "records_updated": updated,
+            "status": status,
+            "error_msg": error_msg
+        }
+        SyncLog.objects.create(**sync_data)
         
         return {
             'added': added,
@@ -625,14 +644,17 @@ class SpaceDevsClient:
         print(f"Total Errors:    {len(all_results['errors'])}")
         print(f"Total Processed: {all_results['total_processed']}")
         
-        # # Log the full sync
-        # status = 'SUCCESS' if not all_results['errors'] else 'PARTIAL'
-        # error_msg = '; '.join(all_results['errors'][:10]) if all_results['errors'] else None
-        # self.db.log_sync('SPACE_DEVS_FULL_RANGE', 
-        #                 all_results['added'], 
-        #                 all_results['updated'], 
-        #                 status, 
-        #                 error_msg)
+        # Log sync
+        status = 'SUCCESS' if not all_results['errors'] else 'PARTIAL'
+        error_msg = '; '.join(all_results['errors'][:10]) if all_results['errors'] else None
+        sync_data = {
+            "data_source": "SPACE_DEVS_FULL_RANGE",
+            "records_added": all_results['added'],
+            "records_updated": all_results['updated'],
+            "status": status,
+            "error_msg": error_msg
+        }
+        SyncLog.objects.create(**sync_data)
         
         return all_results
     
@@ -830,10 +852,17 @@ class SpaceDevsClient:
         print(f"Skipped: {skipped}")
         print(f"Errors:  {len(errors)}")
         
-        # # Log sync
-        # status = 'SUCCESS' if not errors else 'PARTIAL'
-        # error_msg = '; '.join(errors[:10]) if errors else None
-        # self.db.log_sync('SPACE_DEVS_ALL_ROCKETS', added, updated, status, error_msg)
+        # Log sync
+        status = 'SUCCESS' if not errors else 'PARTIAL'
+        error_msg = '; '.join(errors[:5]) if errors else None
+        sync_data = {
+            "data_source": "SPACE_DEVS_ALL_ROCKETS",
+            "records_added": added,
+            "records_updated": updated,
+            "status": status,
+            "error_msg": error_msg
+        }
+        SyncLog.objects.create(**sync_data)
         
         return {
             'added': added,
