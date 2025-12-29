@@ -10,8 +10,11 @@ class LaunchSite(models.Model):
     external_id = models.TextField(null=True)
     turnaround_days = models.IntegerField(default=7)
 
-    models.UniqueConstraint(
-        fields=["name","launch_pad"], 
-        name="unique_location_launchpad_combo",
-        violation_error_message="A Launch site can't have duplicate launch pads"
-        )
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+            fields=["name","launch_pad"], 
+            name="unique_location_launchpad_combo",
+            violation_error_message="A Launch site can't have duplicate launch pads"
+            )
+        ]

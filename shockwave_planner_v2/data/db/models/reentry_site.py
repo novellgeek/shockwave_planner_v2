@@ -10,10 +10,12 @@ class ReentrySite(models.Model):
     external_id = models.TextField(null=True)
     turnaround_days = models.IntegerField(default=7)
 
-    models.UniqueConstraint(
-        fields=["name","drop_zone"], 
-        name="unique_location_dropzone_combo",
-        violation_error_message="A Reentry site can't have duplicate drop zones"
-        )
-
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name","drop_zone"], 
+                name="unique_location_dropzone_combo",
+                violation_error_message="A Reentry site can't have duplicate drop zones"
+            )
+        ]
 
