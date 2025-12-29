@@ -104,8 +104,8 @@ class ReentryTimelineView(QWidget):
                                               )
         
         # Group re-entries by zone
-        zone_reentries = {}
-        zone_prev_reentries = {}  # Track previous month re-entries for turnaround
+        zone_reentries = {(site["site__name"], site['site__drop_zone']):[] for site in current_month_reentries.values("site__name", "site__drop_zone").distinct()}
+        zone_prev_reentries = {(site["site__name"], site['site__drop_zone']):[] for site in prev_month_reentries.values("site__name", "site__drop_zone").distinct()}  # Track previous month re-entries for turnaround
         
         for reentry in current_month_reentries:
             key = (reentry.site.name, reentry.site.drop_zone)
@@ -127,6 +127,7 @@ class ReentryTimelineView(QWidget):
         
         for zone in all_sites:
             country = zone.country
+            
             if not country or country == '':
                 country = 'Other'
             

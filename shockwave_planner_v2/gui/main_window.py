@@ -30,6 +30,7 @@ from gui.launch_sites_view import LaunchSitesView
 from gui.drop_zones_view import DropZonesView
 
 from gui.reentry_vehicles_view import ReentryVehiclesView
+from gui.reentry_dialog import ReentryDialog
 
 class MainWindow(QMainWindow):
     """Main application window for SHOCKWAVE PLANNER v2.0"""
@@ -111,9 +112,9 @@ class MainWindow(QMainWindow):
         # self.timeline_view.launch_selected.connect(self.edit_launch) TODO
         self.tab_widget.addTab(self.timeline_view, "Master Activity Schedule - Launch")
         
-        # Master Activity Schedule - Re-entry TODO 
+        # Master Activity Schedule - Re-entry 
         self.reentry_timeline_view = ReentryTimelineView()
-        # self.reentry_timeline_view.reentry_selected.connect(self.edit_reentry)
+        self.reentry_timeline_view.reentry_selected.connect(self.edit_reentry)
         self.tab_widget.addTab(self.reentry_timeline_view, "Master Activity Schedule - Re-entry")
         
         # Enhanced List view
@@ -134,7 +135,7 @@ class MainWindow(QMainWindow):
         self.sites_view = LaunchSitesView(parent=self)
         self.tab_widget.addTab(self.sites_view, "Launch Sites")
         
-        # Drop Zones view #TODO
+        # Drop Zones view
         self.drop_zones_view = DropZonesView(parent=self)
         self.tab_widget.addTab(self.drop_zones_view, "Drop Zones")
         
@@ -155,8 +156,8 @@ class MainWindow(QMainWindow):
         # new_btn.clicked.connect(self.new_launch)
         button_layout.addWidget(new_btn)
         
-        new_reentry_btn = QPushButton("+ New Re-entry") #TODO
-        # new_reentry_btn.clicked.connect(self.new_reentry)
+        new_reentry_btn = QPushButton("+ New Re-entry")
+        new_reentry_btn.clicked.connect(self.new_reentry)
         button_layout.addWidget(new_reentry_btn)
         
         sync_btn = QPushButton("🔄 Sync Space Devs") #TODO
@@ -188,12 +189,12 @@ class MainWindow(QMainWindow):
     #         self.refresh_all()
     #         self.statusBar().showMessage("Launch added successfully", 3000)
     
-    # def new_reentry(self): TODO
-    #     """Create new re-entry"""
-    #     dialog = ReentryDialog(parent=self)
-    #     if dialog.exec() == QDialog.DialogCode.Accepted:
-    #         self.refresh_all()
-    #         self.statusBar().showMessage("Re-entry added successfully", 3000)
+    def new_reentry(self):
+        """Create new re-entry"""
+        dialog = ReentryDialog(parent=self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.refresh_all()
+            self.statusBar().showMessage("Re-entry added successfully", 3000)
     
     # def edit_launch(self, launch_id: int): TODO
     #     """Edit existing launch"""
@@ -202,12 +203,12 @@ class MainWindow(QMainWindow):
     #         self.refresh_all()
     #         self.statusBar().showMessage("Launch updated successfully", 3000)
     
-    # def edit_reentry(self, reentry_id: int): TODO
-    #     """Edit existing re-entry"""
-    #     dialog = ReentryDialog(parent=self, reentry_id=reentry_id)
-    #     if dialog.exec() == QDialog.DialogCode.Accepted:
-    #         self.refresh_all()
-    #         self.statusBar().showMessage("Re-entry updated successfully", 3000)
+    def edit_reentry(self, reentry_id: int):
+        """Edit existing re-entry"""
+        dialog = ReentryDialog(parent=self, reentry_id=reentry_id)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.refresh_all()
+            self.statusBar().showMessage("Re-entry updated successfully", 3000)
     
     def sync_upcoming_launches(self):
         """Sync upcoming launches from Space Devs"""
@@ -355,7 +356,7 @@ class MainWindow(QMainWindow):
         # self.db.update_all_pad_turnarounds_from_history()
         
         self.timeline_view.update_timeline()
-        # self.reentry_timeline_view.update_timeline()
+        self.reentry_timeline_view.update_timeline()
         self.list_view.refresh()
         # self.map_view.refresh()
         # self.sites_view.refresh_table()

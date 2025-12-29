@@ -11,6 +11,11 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
 from PyQt6.QtCore import QDate, QTime, Qt
 from datetime import datetime
 
+# import data models
+from data.db.models.launch import Launch
+from data.db.models.reentry_site import ReentrySite
+from data.db.models.status import Status
+from data.db.models.reentry import Reentry
 
 class ReentryDialog(QDialog):
     """Dialog for adding/editing re-entry operations"""
@@ -38,12 +43,12 @@ class ReentryDialog(QDialog):
         # Launch selection
         self.launch_combo = QComboBox()
         self.launch_combo.addItem("(No associated launch)", None)
-        launches = self.db.get_all_launches()
+        launches = Launch.objects.all()
         for launch in launches:
-            launch_date = launch.get('launch_date', '')
-            mission = launch.get('mission_name', 'Unknown')
+            launch_date = launch.launch_date
+            mission = launch.mission_name
             display = f"{launch_date} - {mission}"
-            self.launch_combo.addItem(display, launch['launch_id'])
+            self.launch_combo.addItem(display, launch.pk)
         form.addRow("Associated Launch:", self.launch_combo)
         
         # Re-entry date and time
@@ -60,13 +65,13 @@ class ReentryDialog(QDialog):
         self.site_combo = QComboBox()
         self.site_combo.setEditable(True)
         # FIXED: Use get_all_reentry_sites() instead of get_all_sites()
-        reentry_sites = self.db.get_all_reentry_sites()
+        reentry_sites = ReentrySite.objects.all()
         for site in reentry_sites:
-            location = site.get('location', '')
-            drop_zone = site.get('drop_zone', '')
+            location = site.name
+            drop_zone = site.drop_zone
             display = f"{location} - {drop_zone}"
             # FIXED: use 'site_id' which is aliased from reentry_site_id
-            self.site_combo.addItem(display, site['site_id'])
+            self.site_combo.addItem(display, site.pk)
         form.addRow("Re-entry Site:", self.site_combo)
         
         # Add new site button
@@ -94,11 +99,11 @@ class ReentryDialog(QDialog):
         
         # Status
         self.status_combo = QComboBox()
-        statuses = self.db.get_all_statuses()
+        statuses = Status.objects.all()
         for status in statuses:
             self.status_combo.addItem(
-                status['status_name'],
-                status['status_id']
+                status.name,
+                status.pk
             )
         form.addRow("Status:", self.status_combo)
         
@@ -192,20 +197,21 @@ class ReentryDialog(QDialog):
             
             # Save new site
             site_data = {
-                'location': location_edit.text().strip(),
+                'name': location_edit.text().strip(),
                 'drop_zone': dropzone_edit.text().strip() or 'Primary',
-                'country': country_edit.text().strip() or None,
-                'turnaround_days': turnaround_spin.value(),
                 'latitude': lat_spin.value() if lat_spin.value() != 0 else None,
                 'longitude': lon_spin.value() if lon_spin.value() != 0 else None,
-                'zone_type': zone_type_combo.currentText()
+                'country': country_edit.text().strip() or None,
+                'zone_type': zone_type_combo.currentText(),
+                'turnaround_days': turnaround_spin.value()
             }
             
             try:
-                site_id = self.db.add_reentry_site(site_data)
+                reentry = ReentrySite.objects.create(**site_data)
+                site_id = reentry.pk
                 
                 # Add to combo box
-                display = f"{site_data['location']} - {site_data['drop_zone']}"
+                display = f"{site_data['name']} - {site_data['drop_zone']}"
                 self.site_combo.addItem(display, site_id)
                 self.site_combo.setCurrentIndex(self.site_combo.count() - 1)
                 
@@ -215,33 +221,22 @@ class ReentryDialog(QDialog):
     
     def load_reentry_data(self):
         """Load existing re-entry data for editing"""
-        # Get reentries - try multiple methods since we don't know which exists
-        reentries = []
         try:
-            # Try the most likely method names
-            if hasattr(self.db, 'get_all_reentries'):
-                reentries = self.db.get_all_reentries()
-            elif hasattr(self.db, 'get_reentries'):
-                reentries = self.db.get_reentries()
-            else:
-                # Fallback: search through all months to find our reentry
-                current_year = datetime.now().year
-                for year in range(current_year - 1, current_year + 2):
-                    for month in range(1, 13):
-                        month_reentries = self.db.get_reentries_by_month(year, month)
-                        reentries.extend(month_reentries)
+            # Get reentries - try multiple methods since we don't know which exists
+            reentries = Reentry.objects.all()
+            
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load re-entry data: {e}")
             return
         
-        reentry = next((r for r in reentries if r.get('reentry_id') == self.reentry_id), None)
+        reentry = next((r for r in reentries if r.pk == self.reentry_id), None)
         
         if not reentry:
             QMessageBox.warning(self, "Error", "Re-entry not found.")
             return
         
         # Set launch combo
-        launch_id = reentry.get('launch_id')
+        launch_id = reentry.pk
         if launch_id:
             for i in range(self.launch_combo.count()):
                 if self.launch_combo.itemData(i) == launch_id:
@@ -249,18 +244,21 @@ class ReentryDialog(QDialog):
                     break
         
         # Set date and time
-        reentry_date = reentry.get('reentry_date', '')
-        if reentry_date:
-            date_obj = datetime.strptime(reentry_date, '%Y-%m-%d')
+        reentry_date = reentry.reentry_date
+        if reentry_date is not None:
+            date_obj = reentry_date
             self.date_edit.setDate(QDate(date_obj.year, date_obj.month, date_obj.day))
         
-        reentry_time = reentry.get('reentry_time', '12:00:00')
-        if reentry_time:
-            time_parts = reentry_time.split(':')
-            self.time_edit.setTime(QTime(int(time_parts[0]), int(time_parts[1])))
+        reentry_time = reentry.reentry_time if reentry.reentry_time is not None else '12:00:00'
+        if reentry_time is not None:
+            if type(reentry_time) is str:
+                time_parts = reentry_time.split(':')
+                self.time_edit.setTime(QTime(int(time_parts[0]), int(time_parts[1]), int(time_parts[2])))
+            else:
+                self.time_edit.setTime(QTime(reentry_time.hour, reentry_time.minute, reentry_time.second))
         
         # Set site combo
-        site_id = reentry.get('reentry_site_id')
+        site_id = reentry.site.pk
         if site_id:
             for i in range(self.site_combo.count()):
                 if self.site_combo.itemData(i) == site_id:
@@ -268,22 +266,22 @@ class ReentryDialog(QDialog):
                     break
         
         # Set other fields
-        self.component_edit.setText(reentry.get('vehicle_component', ''))
+        self.component_edit.setText(reentry.vehicle_component)
         
-        reentry_type = reentry.get('reentry_type', '')
-        if reentry_type:
+        reentry_type = reentry.reentry_type
+        if reentry_type is not None:
             index = self.type_combo.findText(reentry_type)
             if index >= 0:
                 self.type_combo.setCurrentIndex(index)
         
-        status_id = reentry.get('status_id')
+        status_id = reentry.status.pk
         if status_id:
             for i in range(self.status_combo.count()):
                 if self.status_combo.itemData(i) == status_id:
                     self.status_combo.setCurrentIndex(i)
                     break
         
-        self.remarks_edit.setPlainText(reentry.get('remarks', ''))
+        self.remarks_edit.setPlainText(reentry.remarks)
     
     def save_reentry(self):
         """Save the re-entry to database"""
@@ -319,7 +317,8 @@ class ReentryDialog(QDialog):
             }
             
             try:
-                site_id = self.db.add_reentry_site(site_data)
+                reentry = ReentrySite.objects.create(**site_data)
+                site_id = reentry.pk
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to create site: {e}")
                 return
@@ -334,7 +333,7 @@ class ReentryDialog(QDialog):
             'launch_id': launch_id,
             'reentry_date': self.date_edit.date().toString('yyyy-MM-dd'),
             'reentry_time': self.time_edit.time().toString('HH:mm:ss'),
-            'reentry_site_id': site_id,
+            'site_id': site_id,
             'vehicle_component': self.component_edit.text().strip(),
             'reentry_type': self.type_combo.currentText(),
             'status_id': self.status_combo.currentData(),
@@ -343,14 +342,12 @@ class ReentryDialog(QDialog):
         }
         
         try:
-            if self.reentry_id:
-                # Update existing
-                self.db.update_reentry(self.reentry_id, reentry_data)
-                QMessageBox.information(self, "Success", "Re-entry updated successfully!")
-            else:
-                # Add new
-                self.db.add_reentry(reentry_data)
+            _, created = Reentry.objects.update_or_create(pk = self.reentry_id, defaults=reentry_data)
+            
+            if created:
                 QMessageBox.information(self, "Success", "Re-entry added successfully!")
+            else:
+                QMessageBox.information(self, "Success", "Re-entry updated successfully!")
             
             self.accept()
             
