@@ -28,7 +28,7 @@ from gui.map_view import MapView
 from gui.statistics_view import StatisticsView
 from gui.launch_sites_view import LaunchSitesView
 from gui.drop_zones_view import DropZonesView
-
+from gui.rockets_view import RocketsView
 from gui.reentry_vehicles_view import ReentryVehiclesView
 from gui.reentry_dialog import ReentryDialog
 
@@ -358,12 +358,12 @@ class MainWindow(QMainWindow):
         self.timeline_view.update_timeline()
         self.reentry_timeline_view.update_timeline()
         self.list_view.refresh()
-        # self.map_view.refresh()
-        # self.sites_view.refresh_table()
-        # self.drop_zones_view.refresh_table()
+        self.map_view.refresh()
+        self.sites_view.refresh_table()
+        self.drop_zones_view.refresh_table()
         self.rockets_view.refresh_table()
         # self.reentry_vehicles_tab.refresh_table()
-        # self.statistics_view.refresh()
+        self.statistics_view.refresh()
         
         self.statusBar().showMessage("Refreshed", 2000)
     
