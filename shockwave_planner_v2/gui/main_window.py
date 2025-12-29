@@ -31,6 +31,7 @@ from gui.drop_zones_view import DropZonesView
 from gui.rockets_view import RocketsView
 from gui.reentry_vehicles_view import ReentryVehiclesView
 from gui.reentry_dialog import ReentryDialog
+from gui.launch_editor_dialog import LaunchEditorDialog
 
 class MainWindow(QMainWindow):
     """Main application window for SHOCKWAVE PLANNER v2.0"""
@@ -109,7 +110,7 @@ class MainWindow(QMainWindow):
         
        # Master Activity Schedule - Launch
         self.timeline_view = TimelineView()
-        # self.timeline_view.launch_selected.connect(self.edit_launch) TODO
+        self.timeline_view.launch_selected.connect(self.edit_launch)
         self.tab_widget.addTab(self.timeline_view, "Master Activity Schedule - Launch")
         
         # Master Activity Schedule - Re-entry 
@@ -119,7 +120,7 @@ class MainWindow(QMainWindow):
         
         # Enhanced List view
         self.list_view = EnhancedListView()
-        # self.list_view.launch_selected.connect(self.edit_launch) TODO
+        self.list_view.launch_selected.connect(self.edit_launch)
         self.tab_widget.addTab(self.list_view, "Launch List View")
         
         # # Launch Site Map view TODO
@@ -153,7 +154,7 @@ class MainWindow(QMainWindow):
         button_layout = QHBoxLayout()
         
         new_btn = QPushButton("+ New Launch") #TODO
-        # new_btn.clicked.connect(self.new_launch)
+        new_btn.clicked.connect(self.new_launch)
         button_layout.addWidget(new_btn)
         
         new_reentry_btn = QPushButton("+ New Re-entry")
@@ -182,26 +183,26 @@ class MainWindow(QMainWindow):
         # Status bar
         self.statusBar().showMessage("Ready - SHOCKWAVE PLANNER v2.0")
     
-    # def new_launch(self): TODO
-    #     """Create new launch"""
-    #     dialog = LaunchEditorDialog(parent=self)
-    #     if dialog.exec() == QDialog.DialogCode.Accepted:
-    #         self.refresh_all()
-    #         self.statusBar().showMessage("Launch added successfully", 3000)
+    def new_launch(self): 
+        """Create new launch"""
+        dialog = LaunchEditorDialog(parent=self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.refresh_all()
+            self.statusBar().showMessage("Launch added successfully", 3000)
     
-    def new_reentry(self):
+    def new_reentry(self): #TODO
         """Create new re-entry"""
         dialog = ReentryDialog(parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_all()
             self.statusBar().showMessage("Re-entry added successfully", 3000)
     
-    # def edit_launch(self, launch_id: int): TODO
-    #     """Edit existing launch"""
-    #     dialog = LaunchEditorDialog(launch_id, parent=self)
-    #     if dialog.exec() == QDialog.DialogCode.Accepted:
-    #         self.refresh_all()
-    #         self.statusBar().showMessage("Launch updated successfully", 3000)
+    def edit_launch(self, launch_id: int): 
+        """Edit existing launch"""
+        dialog = LaunchEditorDialog(launch_id, parent=self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.refresh_all()
+            self.statusBar().showMessage("Launch updated successfully", 3000)
     
     def edit_reentry(self, reentry_id: int):
         """Edit existing re-entry"""

@@ -1,9 +1,18 @@
 from PyQt6.QtWidgets import (QPushButton, QDialog, QFormLayout, QDialogButtonBox, 
                               QLineEdit, QComboBox, QDateEdit, QTimeEdit, QTextEdit,
                               QMessageBox, QTableWidget, QTableWidgetItem)
-from PyQt6.QtCore import QDate
+from PyQt6.QtCore import QDate, QTime
 from datetime import datetime
+from django.db.models import Q
+from django.db import transaction
 
+# import data models
+from data.db.models.launch import Launch
+from data.db.models.launch_site import LaunchSite
+from data.db.models.rocket import Rocket
+from data.db.models.status import Status
+from data.db.models.launch_notam import LaunchNotam
+from data.db.models.notam import Notam
 
 class LaunchEditorDialog(QDialog):
     """Dialog for adding/editing launch records"""
@@ -13,7 +22,7 @@ class LaunchEditorDialog(QDialog):
         self.launch_id = launch_id
         self.init_ui()
         
-        if launch_id:
+        if launch_id is not None:
             self.load_launch_data()
     
     def init_ui(self):
@@ -35,9 +44,9 @@ class LaunchEditorDialog(QDialog):
         # Launch Site
         self.site_combo = QComboBox()
         self.site_combo.setEditable(True)
-        sites = self.db.get_all_sites()
+        sites = LaunchSite.objects.all()
         for site in sites:
-            self.site_combo.addItem(f"{site['location']} - {site['launch_pad']}", site['site_id'])
+            self.site_combo.addItem(f"{site.name} - {site.launch_pad}", site.pk)
         layout.addRow("Launch Site:", self.site_combo)
         
         # Add Site button
@@ -48,9 +57,9 @@ class LaunchEditorDialog(QDialog):
         # Rocket
         self.rocket_combo = QComboBox()
         self.rocket_combo.setEditable(True)
-        rockets = self.db.get_all_rockets()
+        rockets = Rocket.objects.all()
         for rocket in rockets:
-            self.rocket_combo.addItem(rocket['name'], rocket['rocket_id'])
+            self.rocket_combo.addItem(rocket.name, rocket.pk)
         layout.addRow("Rocket:", self.rocket_combo)
         
         # Add Rocket button
@@ -89,9 +98,9 @@ class LaunchEditorDialog(QDialog):
 
         # Status
         self.status_combo = QComboBox()
-        statuses = self.db.get_all_statuses()
+        statuses = Status.objects.all()
         for status in statuses:
-            self.status_combo.addItem(status['status_name'], status['status_id'])
+            self.status_combo.addItem(status.name, status.pk)
         layout.addRow("Status:", self.status_combo)
         
         # Remarks
@@ -112,54 +121,48 @@ class LaunchEditorDialog(QDialog):
     
     def load_launch_data(self):
         """Load existing launch data"""
-        launches = self.db.get_launches_by_date_range('1900-01-01', '2100-01-01')
-        launch = next((l for l in launches if l['launch_id'] == self.launch_id), None)
+        launches = Launch.objects.all()
+        launch = next((l for l in launches if l.pk == self.launch_id), None)
         
-        if launch:
-            if launch['launch_date']:
-                date_obj = datetime.strptime(launch['launch_date'], '%Y-%m-%d')
+        if launch is not None:
+            if launch.launch_date is not None:
+                date_obj = launch.launch_date
                 self.date_edit.setDate(QDate(date_obj.year, date_obj.month, date_obj.day))
             
-            if launch['launch_time']:
-                time_obj = datetime.strptime(launch['launch_time'], '%H:%M:%S').time()
+            if launch.launch_time is not None:
+                time_obj = launch.launch_time
                 self.time_edit.setTime(QTime(time_obj.hour, time_obj.minute, time_obj.second))
             
-            if launch['site_id']:
-                index = self.site_combo.findData(launch['site_id'])
+            if launch.site.pk is not None:
+                index = self.site_combo.findData(launch.site.pk)
                 if index >= 0:
                     self.site_combo.setCurrentIndex(index)
             
-            if launch['rocket_id']:
-                index = self.rocket_combo.findData(launch['rocket_id'])
+            if launch.rocket.pk is not None:
+                index = self.rocket_combo.findData(launch.rocket.pk)
                 if index >= 0:
                     self.rocket_combo.setCurrentIndex(index)
             
-            if launch['status_id']:
-                index = self.status_combo.findData(launch['status_id'])
+            if launch.status.pk is not None:
+                index = self.status_combo.findData(launch.status.pk)
                 if index >= 0:
                     self.status_combo.setCurrentIndex(index)
             
-            self.mission_edit.setText(launch.get('mission_name') or '')
-            self.payload_edit.setText(launch.get('payload_name') or '')
+            self.mission_edit.setText(launch.mission_name)
+            self.payload_edit.setText(launch.payload_name)
             
-            notam_data = self.db.conn.cursor().execute("""
-                                                        SELECT ln.serial 
-                                                        FROM launch_notam AS ln 
-                                                        WHERE ln.launch_id == ?;
-                                                       """, 
-                                                       (str(launch['launch_id']),)
-                                                       )
-            notam_data = [dict(row) for row in notam_data.fetchall()]
+            notam_data = list(launch.notams.all())
+            
             for col in range(len(notam_data)):
-                serial = notam_data[col]["serial"]
+                serial = notam_data[col].serial
                 self.notam_edit.setItem(0, col, QTableWidgetItem(serial))
 
-            if launch.get('orbit_type'):
-                index = self.orbit_combo.findText(launch['orbit_type'])
+            if launch.orbit_type is not None:
+                index = self.orbit_combo.findText(launch.orbit_type)
                 if index >= 0:
                     self.orbit_combo.setCurrentIndex(index)
             
-            self.remarks_edit.setPlainText(launch.get('remarks') or '')
+            self.remarks_edit.setPlainText(launch.remarks)
     
     def add_new_notam(self):
         """Open dialog to add a new NOTAM"""
@@ -192,13 +195,7 @@ class LaunchEditorDialog(QDialog):
             
             try:
                 # TODO validate NOTAM serial
-                self.db.conn.cursor().execute("""
-                                                INSERT OR IGNORE INTO notam (serial)
-                                                VALUES (?);
-                                                """,
-                                                (notam_data['serial'],)
-                                            )
-                self.db.conn.commit()
+                Notam.objects.create(**notam_data)
                               
                 QMessageBox.information(self, "Success", "NOTAM added successfully!")
             
@@ -253,7 +250,7 @@ class LaunchEditorDialog(QDialog):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Save new site
             site_data = {
-                'location': location_edit.text(),
+                'name': location_edit.text(),
                 'launch_pad': pad_edit.text(),
                 'country': country_edit.text(),
                 'latitude': lat_spin.value() if lat_spin.value() != 0 else None,
@@ -262,10 +259,10 @@ class LaunchEditorDialog(QDialog):
             }
             
             try:
-                site_id = self.db.add_site(site_data)
+                site_id = LaunchSite.objects.create(**site_data)
                 
                 # Add to combo box
-                display = f"{site_data['location']} - {site_data['launch_pad']}"
+                display = f"{site_data['name']} - {site_data['launch_pad']}"
                 self.site_combo.addItem(display, site_id)
                 self.site_combo.setCurrentIndex(self.site_combo.count() - 1)
                 
@@ -323,7 +320,7 @@ class LaunchEditorDialog(QDialog):
             }
             
             try:
-                rocket_id = self.db.add_rocket(rocket_data)
+                rocket_id = Rocket.objects.create(**rocket_data)
                 
                 # Add to combo box
                 self.rocket_combo.addItem(rocket_name, rocket_id)
@@ -357,7 +354,7 @@ class LaunchEditorDialog(QDialog):
             }
             
             try:
-                site_id = self.db.add_site(site_data)
+                LaunchSite.objects.create(**site_data)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to create site: {e}")
                 return
@@ -377,17 +374,17 @@ class LaunchEditorDialog(QDialog):
             }
             
             try:
-                rocket_id = self.db.add_rocket(rocket_data)
+                rocket_id = Rocket.objects.create(**rocket_data)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to create rocket: {e}")
                 return
         
         # Validate we have required data
-        if not site_id:
+        if site_id is None:
             QMessageBox.warning(self, "Validation Error", "Please select or enter a launch site.")
             return
         
-        if not rocket_id:
+        if rocket_id is None:
             QMessageBox.warning(self, "Validation Error", "Please select or enter a rocket.")
             return
         
@@ -406,64 +403,79 @@ class LaunchEditorDialog(QDialog):
         }
        
         try:
-            if self.launch_id:
-                self.db.update_launch(self.launch_id, launch_data)
+            with transaction.atomic():
                 
-                # Update NOTAM entries
-                old_notam = self.db.conn.cursor().execute("""
-                                                        SELECT ln.serial 
-                                                        FROM launch_notam AS ln 
-                                                        WHERE ln.launch_id == ?;
-                                                       """, 
-                                                       (self.launch_id,)
-                                                       )
-                old_notam = [dict(row) for row in old_notam.fetchall()]
-                
-                user_inputs = []
-                for col in range(self.notam_edit.columnCount()):
-                    try:
-                        user_inputs.append(self.notam_edit.item(0, col).data(0))
-                    except:
-                        pass
+                if self.launch_id is not None:
+                    launch = Launch.objects.filter(pk=self.launch_id)
+                    curr_launch = launch[0]
 
-                for col in range(len(user_inputs)):
-                    new_serial = user_inputs[col]   
-                    try:
-                        old_serial = old_notam[col]['serial']
-                    except:
-                        old_serial = ""
+                    # update fields except NOTAM
+                    launch.update(**launch_data)
+                    
+                    # Update NOTAM entries
+                    curr_notam = list(launch[0].notams.all())
+                                    
+                    user_inputs = []
+                    for col in range(self.notam_edit.columnCount()):
+                        try:
+                            user_inputs.append(self.notam_edit.item(0, col).data(0))
+                        except:
+                            pass
 
-                    if new_serial != old_serial:
-                        if new_serial == "":
-                            self.db.conn.cursor().execute("""
-                                                            DELETE FROM launch_notam
-                                                            WHERE launch_id = ? AND serial = ?;
-                                                        """,
-                                                        (self.launch_id, old_serial,)
-                                                        )
-                            self.db.conn.cursor().execute("COMMIT;")
-                            continue
+                    for col in range(len(user_inputs)):
+                        new_serial = user_inputs[col]   
+                        try:
+                            old_serial = curr_notam[col].serial
+                        except:
+                            old_serial = ""
                         
-                        self.db.conn.cursor().execute("BEGIN TRANSACTION;")
-                        self.db.conn.cursor().execute("""
-                                                        DELETE FROM launch_notam
-                                                        WHERE launch_id = ? AND serial = ?;
-                                                    """,
-                                                    (self.launch_id, old_serial,)
-                                                    )
-                        self.db.conn.cursor().execute("""
-                                                        INSERT OR IGNORE INTO launch_notam (launch_id, serial)
-                                                        VALUES (?, ?);
-                                                    """,
-                                                    (self.launch_id, new_serial,)
-                                                    )                 
-                        self.db.conn.cursor().execute("COMMIT;")
-                                      
+                        if new_serial != old_serial:
+                            if new_serial == "":
+                                curr_launch.notams.filter(Q(launch__pk=self.launch_id) & Q(serial=old_serial)).delete()
+
+                                continue
+                            
+                            curr_launch.notams.filter(Q(launch__pk=self.launch_id) & Q(serial=old_serial)).delete()
+                            
+                            new_notam = Notam.objects.filter(serial=new_serial).first()
+                            
+                            launch_notam_data = {"launch_id":curr_launch, "serial": new_notam}
+                            
+                            LaunchNotam.objects.create(**launch_notam_data)
+
+                    
+                    QMessageBox.information(self, "Success", "Launch updated successfully!")
                 
-                QMessageBox.information(self, "Success", "Launch updated successfully!")
-            else:
-                self.db.add_launch(launch_data)
-                QMessageBox.information(self, "Success", "Launch added successfully!")
+                else:
+                    curr_launch = Launch.objects.create(**launch_data)
+                    
+                    user_inputs = []
+                    for col in range(self.notam_edit.columnCount()):
+                        try:
+                            user_inputs.append(self.notam_edit.item(0, col).data(0))
+                        except:
+                            pass
+
+                    # Update NOTAM entries                    
+                    for col in range(len(user_inputs)):
+                        new_serial = user_inputs[col]   
+                        old_serial = ""
+                        
+                        if new_serial != old_serial:
+                            if new_serial == "":
+                                curr_launch.notams.filter(Q(launch__pk=self.launch_id) & Q(serial=old_serial)).delete()
+
+                                continue
+                            
+                            curr_launch.notams.filter(Q(launch__pk=self.launch_id) & Q(serial=old_serial)).delete()
+                            
+                            new_notam = Notam.objects.filter(serial=new_serial).first()
+                            
+                            launch_notam_data = {"launch_id":curr_launch, "serial": new_notam}
+                            
+                            LaunchNotam.objects.create(**launch_notam_data)
+
+                    QMessageBox.information(self, "Success", "Launch added successfully!")
             
             self.accept()
             
