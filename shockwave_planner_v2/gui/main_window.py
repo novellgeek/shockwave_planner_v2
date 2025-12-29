@@ -41,6 +41,7 @@ class MainWindow(QMainWindow):
         self.sync_worker = None
         self.init_ui()
     
+    # TODO add transaction to all delete functions
     def init_ui(self):
         self.setWindowTitle("SHOCKWAVE PLANNER v2.0 - Launch Operations Planning System")
         self.setGeometry(100, 100, 1600, 900)
@@ -144,9 +145,9 @@ class MainWindow(QMainWindow):
         self.rockets_view = RocketsView(parent=self)
         self.tab_widget.addTab(self.rockets_view, "Launch Vehicles")
         
-        # # Re-entry vehicle view
-        # self.reentry_vehicles_tab = ReentryVehiclesView()
-        # self.tab_widget.addTab(self.reentry_vehicles_tab, "Re-entry Vehicles")
+        # Re-entry vehicle view
+        self.reentry_vehicles_tab = ReentryVehiclesView()
+        self.tab_widget.addTab(self.reentry_vehicles_tab, "Re-entry Vehicles")
         
         main_layout.addWidget(self.tab_widget)
         
