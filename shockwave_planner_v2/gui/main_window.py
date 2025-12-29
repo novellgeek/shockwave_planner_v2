@@ -139,9 +139,9 @@ class MainWindow(QMainWindow):
         self.drop_zones_view = DropZonesView(parent=self)
         self.tab_widget.addTab(self.drop_zones_view, "Drop Zones")
         
-        # # Rockets view #TODO
-        # self.rockets_view = RocketsView(parent=self)
-        # self.tab_widget.addTab(self.rockets_view, "Launch Vehicles")
+        # Rockets view
+        self.rockets_view = RocketsView(parent=self)
+        self.tab_widget.addTab(self.rockets_view, "Launch Vehicles")
         
         # # Re-entry vehicle view
         # self.reentry_vehicles_tab = ReentryVehiclesView()
@@ -361,7 +361,7 @@ class MainWindow(QMainWindow):
         # self.map_view.refresh()
         # self.sites_view.refresh_table()
         # self.drop_zones_view.refresh_table()
-        # self.rockets_view.refresh_table()
+        self.rockets_view.refresh_table()
         # self.reentry_vehicles_tab.refresh_table()
         # self.statistics_view.refresh()
         

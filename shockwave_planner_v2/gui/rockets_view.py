@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                               QDialogButtonBox, QScrollArea)
 from PyQt6.QtCore import Qt
 
-from rocket_editor_dialog import RocketEditorDialog
+from .rocket_editor_dialog import RocketEditorDialog
 
 # import data models
 from data.db.models.rocket import Rocket
