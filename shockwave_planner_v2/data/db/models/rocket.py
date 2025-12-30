@@ -17,3 +17,4 @@ class Rocket(models.Model):
     stages = models.IntegerField(null=True)
     boosters = models.IntegerField(null=True)
     external_id = models.TextField(null=True, unique=True)
+    config_id = models.BigIntegerField(null=True)

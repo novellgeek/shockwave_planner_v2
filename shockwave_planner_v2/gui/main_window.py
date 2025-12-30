@@ -33,6 +33,9 @@ from gui.reentry_vehicles_view import ReentryVehiclesView
 from gui.reentry_dialog import ReentryDialog
 from gui.launch_editor_dialog import LaunchEditorDialog
 
+# import data models
+from data.db.models.rocket import Rocket
+
 class MainWindow(QMainWindow):
     """Main application window for SHOCKWAVE PLANNER v2.0"""
     
@@ -85,7 +88,7 @@ class MainWindow(QMainWindow):
         data_menu.addSeparator()
         
         sync_rockets_action = QAction('Sync Rocket Details (Space Devs)', self)
-        # sync_rockets_action.triggered.connect(self.sync_rocket_details) #TODO
+        sync_rockets_action.triggered.connect(self.sync_rocket_details) #TODO
         data_menu.addAction(sync_rockets_action)
         
         data_menu.addSeparator()
@@ -124,7 +127,7 @@ class MainWindow(QMainWindow):
         self.list_view.launch_selected.connect(self.edit_launch)
         self.tab_widget.addTab(self.list_view, "Launch List View")
         
-        # # Launch Site Map view TODO
+        # # Launch Site Map view #TODO
         self.map_view = MapView()
         # self.map_view.site_selected.connect(self.show_site_launches)
         self.tab_widget.addTab(self.map_view, "Launch Site Map")
@@ -238,22 +241,22 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self.start_sync('previous', 50)
     
-    # def sync_rocket_details(self): TODO
-    #     """Sync rocket details from Space Devs"""
-    #     rockets_count = len(self.db.get_all_rockets())
+    def sync_rocket_details(self): #TODO
+        """Sync rocket details from Space Devs"""
+        rockets_count = len(Rocket.objects.all())
         
-    #     reply = QMessageBox.question(
-    #         self,
-    #         'Sync Rocket Details',
-    #         f'Update rocket details from The Space Devs API?\n\n'
-    #         f'This will fetch family, variant, manufacturer, and country\n'
-    #         f'for {rockets_count} rockets in your database.\n\n'
-    #         f'Note: Only rockets synced from Space Devs can be updated.',
-    #         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-    #     )
+        reply = QMessageBox.question(
+            self,
+            'Sync Rocket Details',
+            f'Update rocket details from The Space Devs API?\n\n'
+            f'This will fetch family, variant, manufacturer, and country\n'
+            f'for {rockets_count} rockets in your database.\n\n'
+            f'Note: Only rockets synced from Space Devs can be updated.',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
         
-    #     if reply == QMessageBox.StandardButton.Yes:
-    #         self.start_sync('rockets', 0)
+        if reply == QMessageBox.StandardButton.Yes:
+            self.start_sync('rockets', 100)
     
     def start_sync(self, sync_type: str, limit: int):
         """Start background sync"""

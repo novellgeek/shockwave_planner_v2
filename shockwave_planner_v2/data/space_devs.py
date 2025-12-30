@@ -251,6 +251,7 @@ class SpaceDevsClient:
             rocket_payload_gto = configuration["gto_capacity"]
             rocket_payload_sso = configuration["sso_capacity"]
             rocket_mass = configuration["launch_mass"]
+            rocket_config_id = configuration["id"]
 
             # extract mission data
             mission = launch['mission']
@@ -337,7 +338,8 @@ class SpaceDevsClient:
                     "diameter": rocket_diameter,
                     "mass": rocket_mass,
                     "stages": rocket_min_stages,
-                    'external_id': rocket["id"]
+                    'external_id': rocket["id"],
+                    "config_id": rocket_config_id
                 }
             }
         except Exception as e:
@@ -682,7 +684,7 @@ class SpaceDevsClient:
             
             try:
                 # Fetch rocket config from Space Devs
-                url = f"https://lldev.thespacedevs.com/2.3.0/config/launcher/{external_id}/"
+                url = f"https://lldev.thespacedevs.com/2.3.0/launcher_configurations/{rocket.config_id}/"
                 
                 logging.info(f"   Fetching details for: {rocket.name}...")
                 
@@ -707,8 +709,8 @@ class SpaceDevsClient:
                     'country': config['manufacturer']['country'][0]['name'],
                 }
                 
-                # Update rocket - PRESERVE MANUAL DATA (alternative_name, boosters, payload_sso, payload_tli)
-                rocket.objects.update(**rocket_data)
+                # Update rocket - PRESERVE MANUAL DATA (alternative_name, boosters, payload_tli)
+                Rocket.objects.filter(pk=rocket.pk).update(**rocket_data)
                 updated_count += 1
                 print("✓")
                 
@@ -726,51 +728,6 @@ class SpaceDevsClient:
             'updated': updated_count,
             'errors': errors
         }
-    
-    def fetch_all_rockets(self) -> List[Dict]: #FIXME
-        """
-        Fetch all launcher configurations from Space Devs API
-        Returns: List of rocket configuration dictionaries
-        """
-        all_rockets = []
-        url = "https://ll.thespacedevs.com/2.3.0/config/launcher/"
-        page = 1
-        
-        print("🚀 Fetching all rockets from Space Devs API...")
-        
-        while url:
-            try:
-                print(f"   Page {page}...", end=' ')
-                
-                if page > 1:
-                    time.sleep(self.RATE_LIMIT_DELAY)
-                
-                resp = self.session.get(url, timeout=30)
-                
-                if resp.status_code == 429:
-                    print("⚠️  Rate limited! Waiting 60 seconds...")
-                    time.sleep(60)
-                    resp = self.session.get(url, timeout=30)
-                
-                if resp.status_code != 200:
-                    print(f"❌ Error: HTTP {resp.status_code}")
-                    break
-                
-                data = resp.json()
-                results = data.get("results", [])
-                all_rockets.extend(results)
-                
-                print(f"✓ ({len(results)} rockets)")
-                
-                url = data.get("next")
-                page += 1
-                
-            except Exception as e:
-                print(f"❌ Error fetching page {page}: {e}")
-                break
-        
-        print(f"✅ Fetched {len(all_rockets)} total rockets")
-        return all_rockets
     
     def sync_all_rockets(self) -> dict:
         """
@@ -808,7 +765,7 @@ class SpaceDevsClient:
         for api_rocket in api_rockets:
             try:
                 external_id = str(api_rocket['id'])
-                
+
                 if external_id != '':
                     skipped += 1
                     continue
@@ -828,12 +785,23 @@ class SpaceDevsClient:
                 if external_id in existing_by_external_id:
                     # Update existing rocket - PRESERVE MANUAL DATA
                     existing = existing_by_external_id[external_id]
-                    self.db.update_rocket_preserve_manual(existing['rocket_id'], rocket_data)
+                    
+                    # Update rocket but preserve manually entered fields if API data is missing
+                    # This is used during Space Devs sync to avoid overwriting manual data
+
+                    # Get current rocket data
+                    to_update = Rocket.objects.filter(external_id=external_id)
+                    # Only update fields that are provided in rocket_data
+                    # If a field is None in rocket_data, keep the current value
+                    to_update.update(**rocket_data)
+                    
                     updated += 1
                     print(f"   ↻ Updated: {rocket_data['name']}")
                 else:
                     # Add new rocket
-                    self.db.add_rocket(rocket_data)
+                    Rocket.objects.create(**rocket_data)
+
+
                     added += 1
                     print(f"   + Added: {rocket_data['name']}")
                 
