@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                               QDialogButtonBox, QDoubleSpinBox, QComboBox, QSpinBox)
 from PyQt6.QtCore import Qt
 
-from .site_editor_dialog import SiteEditorDialog
+from dialog.site_editor_dialog import SiteEditorDialog
 
 # import data models
 from data.db.models.launch_site import LaunchSite
