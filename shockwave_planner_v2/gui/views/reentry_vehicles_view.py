@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
 from PyQt6.QtCore import Qt
 
 # import gui
-from dialog.reentry_vehicle_editor_dialog import ReentryVehicleEditorDialog
+from gui.dialog.reentry_vehicle_editor_dialog import ReentryVehicleEditorDialog
 
 # import data models
 from data.db.models.reentry_vehicle import ReentryVehicle

@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                               QDialogButtonBox, QDoubleSpinBox, QComboBox, QSpinBox)
 from PyQt6.QtCore import Qt
 
-from dialog.zone_editor_dialog import ZoneEditorDialog
+from gui.dialog.zone_editor_dialog import ZoneEditorDialog
 
 # import data models
 from data.db.models.reentry_site import ReentrySite

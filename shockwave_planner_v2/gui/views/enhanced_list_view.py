@@ -10,7 +10,6 @@ from PyQt6.QtGui import QColor
 from datetime import datetime, timedelta
 
 from data.db.models.launch import Launch
-from data.db.models.launch_notam import LaunchNotam
 
 class EnhancedListView(QWidget):
     """
