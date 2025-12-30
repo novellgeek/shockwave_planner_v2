@@ -21,17 +21,17 @@ from data.space_devs import SpaceDevsClient
 from data.space_devs_worker import SyncWorker
 
 # import GUI elements
-from gui.enhanced_list_view import EnhancedListView
-from gui.timeline_view import TimelineView
-from gui.timeline_view_reentry import ReentryTimelineView
-from gui.map_view import MapView
-from gui.statistics_view import StatisticsView
-from gui.launch_sites_view import LaunchSitesView
-from gui.drop_zones_view import DropZonesView
-from gui.rockets_view import RocketsView
-from gui.reentry_vehicles_view import ReentryVehiclesView
-from gui.reentry_dialog import ReentryDialog
-from gui.launch_editor_dialog import LaunchEditorDialog
+from gui.views.enhanced_list_view import EnhancedListView
+from gui.views.timeline_view import TimelineView
+from gui.views.timeline_view_reentry import ReentryTimelineView
+from gui.views.map_view import MapView
+from gui.views.statistics_view import StatisticsView
+from gui.views.launch_sites_view import LaunchSitesView
+from gui.views.drop_zones_view import DropZonesView
+from gui.views.rockets_view import RocketsView
+from gui.views.reentry_vehicles_view import ReentryVehiclesView
+from gui.dialog.reentry_dialog import ReentryDialog
+from gui.dialog.launch_editor_dialog import LaunchEditorDialog
 
 # import data models
 from data.db.models.rocket import Rocket
