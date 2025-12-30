@@ -535,7 +535,7 @@ class MapView(QWidget):
     
     def clear_custom_notam(self):
         """Clear custom NOTAM"""
-        if self.selected_launch and 'custom_notam' in self.selected_launch:
+        if self.selected_launch and 'custom_notam' in self.selected_launch: #FIXME
             del self.selected_launch['custom_notam']
         
         self.custom_notam_text.clear()
